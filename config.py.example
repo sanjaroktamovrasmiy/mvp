@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Bot konfiguratsiyasi
+"""
+
+# Bot token (Telegram BotFather dan olingan)
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+
+# Boss ID (Telegram user ID)
+BOSS_ID = YOUR_BOSS_ID_HERE
+
+# JSON fayl yo'li
+DATA_FILE = "data.json"
+
