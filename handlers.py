@@ -9,17 +9,74 @@ import logging
 import os
 from datetime import datetime
 import pytz
+from io import BytesIO
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
+import pdfkit
 
 from config import BOSS_ID
 from database import load_data, save_data
-from utils import check_subscription, calculate_rasch_score, generate_pdf
+from utils import check_subscription, calculate_rasch_score, generate_pdf, evaluate_students_from_matrix
 
 # O'zbekiston vaqti (UTC+5)
 UZBEKISTAN_TZ = pytz.timezone('Asia/Tashkent')
 
 logger = logging.getLogger(__name__)
+
+
+def generate_test_post(test_data, test_id, bot_username=None):
+    """
+    Test haqida ko'rkam va tushunarli post yaratish
+    
+    Args:
+        test_data: Test ma'lumotlari
+        test_id: Test ID
+        bot_username: Bot username (ixtiyoriy)
+    
+    Returns:
+        tuple: (post_text, inline_keyboard) - HTML formatidagi post matni va inline keyboard
+    """
+    test_name = test_data.get('name', 'Test')
+    total_questions = len(test_data.get('questions', []))
+    
+    # Test boshlanish vaqti
+    start_time_text = ""
+    if 'start_time' in test_data:
+        try:
+            start_time = datetime.fromisoformat(test_data['start_time'])
+            if start_time.tzinfo is None:
+                start_time = UZBEKISTAN_TZ.localize(start_time)
+            start_time_text = f"\n⏰ <b>Test boshlanish vaqti:</b> {start_time.strftime('%d.%m.%Y %H:%M')}\n"
+        except:
+            pass
+    
+    # Bot username (agar berilmagan bo'lsa, default)
+    if not bot_username:
+        bot_username = "Test Bot"
+    
+    post = f"""
+📝 <b>{test_name}</b>
+
+📊 <b>Ma'lumotlar:</b>
+• Savollar soni: {total_questions} ta
+• Format: Ko'p tanlovli (a, b, c, d){start_time_text}
+⚠️ <b>Shartlar:</b>
+• Har bir testni faqat <b>1 marta</b> ishlash mumkin
+• Javoblarni <b>1a2b3c4d...</b> formatida yuboring
+• Javoblar soni savollar soniga mos kelishi kerak
+
+✅ Test yakunlangach, natijalar o'qituvchi tomonidan e'lon qilinadi.
+
+🎓 Muvaffaqiyatlar!
+"""
+    
+    # Inline keyboard yaratish - testni boshlash uchun
+    keyboard = [
+        [InlineKeyboardButton("🚀 Testni boshlash", callback_data=f"start_test_{test_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    return post, reply_markup
 
 
 async def check_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -582,12 +639,54 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             
             test_name = context.user_data.get('test_name', 'Noma\'lum')
             test_questions = context.user_data.get('test_questions', [])
+            
+            # Test post yaratish va yuborish
+            # Bot username ni olish
+            try:
+                bot_info = await context.bot.get_me()
+                bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
+            except:
+                bot_username = "Test Bot"
+            
+            post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
+            
+            # Postni yuborish (inline keyboard bilan)
+            try:
+                await update.message.reply_text(
+                    post_text,
+                    parse_mode='HTML',
+                    reply_markup=reply_markup
+                )
+            except Exception as post_error:
+                logger.error(f"Post yuborish xatosi: {post_error}")
+                # Agar HTML parse xatosi bo'lsa, oddiy matn sifatida yuborish
+                try:
+                    await update.message.reply_text(
+                        post_text.replace('<b>', '').replace('</b>', '')
+                        .replace('<code>', '').replace('</code>', ''),
+                        reply_markup=reply_markup
+                    )
+                except:
+                    await update.message.reply_text(
+                        post_text.replace('<b>', '').replace('</b>', '')
+                        .replace('<code>', '').replace('</code>', '')
+                    )
+            
             context.user_data.clear()
+            
+            # Postni ko'rsatish uchun inline keyboard qo'shish
+            share_keyboard = [
+                [InlineKeyboardButton("📢 Ulashish", callback_data=f"view_post_{test_id}")]
+            ]
+            share_markup = InlineKeyboardMarkup(share_keyboard)
+            
             await update.message.reply_text(
                 f"✅ Test muvaffaqiyatli yaratildi!\n\n"
                 f"Test ID: {test_id}\n"
                 f"Test nomi: {test_name}\n"
-                f"Savollar soni: {len(test_questions)}"
+                f"Savollar soni: {len(test_questions)}\n\n"
+                f"📋 Postni ko'rish uchun quyidagi tugmani bosing:",
+                reply_markup=share_markup
             )
             
         except Exception as e:
@@ -783,6 +882,7 @@ async def edit_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id:
         [InlineKeyboardButton("📄 Test faylini qayta yuklash", callback_data=f"edit_file_{test_id}")],
         [InlineKeyboardButton("✅ Javoblarni o'zgartirish", callback_data=f"edit_answers_{test_id}")],
         [InlineKeyboardButton("📅 Boshlanish vaqtini o'zgartirish", callback_data=f"edit_start_time_{test_id}")],
+        [InlineKeyboardButton("📢 Ulashish", callback_data=f"view_post_{test_id}")],
         [InlineKeyboardButton("📊 Testni natijalash", callback_data=f"finalize_test_{test_id}")],
         [InlineKeyboardButton("📋 0-1 Matrix yuklab olish", callback_data=f"download_matrix_{test_id}")],
         [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_edit")]
@@ -1364,6 +1464,70 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         test_id = data.replace("start_test_", "")
         await start_test(update, context, test_id)
     
+    # Postni ko'rish (ulashish)
+    elif data.startswith("view_post_"):
+        test_id = data.replace("view_post_", "")
+        data_file = load_data()
+        if test_id in data_file['tests']:
+            test_data = data_file['tests'][test_id]
+            try:
+                bot_info = await context.bot.get_me()
+                bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
+            except:
+                bot_username = "Test Bot"
+            
+            post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
+            # Postni yangi xabar sifatida yuborish (nusxalab yuborish uchun)
+            await query.answer("📢 Post yuborilmoqda...")
+            await query.message.reply_text(
+                post_text,
+                parse_mode='HTML',
+                reply_markup=reply_markup
+            )
+        else:
+            await query.answer("❌ Test topilmadi!", show_alert=True)
+    
+    # Barcha testlar ro'yxati
+    elif data == "list_all_tests":
+        await query.answer("📋 Testlar ro'yxati yuborilmoqda...")
+        # list_tests funksiyasini to'g'ridan-to'g'ri chaqirish
+        # Lekin u message kerak, shuning uchun callback query message orqali yuboramiz
+        data_file = load_data()
+        if not data_file['tests']:
+            await query.message.reply_text("❌ Hozircha testlar mavjud emas.")
+            return
+        
+        user_id = query.from_user.id
+        is_boss = user_id == BOSS_ID
+        is_admin = user_id in data_file.get("admins", [])
+        
+        keyboard = []
+        for test_id, test_data in data_file['tests'].items():
+            can_edit = (is_boss or is_admin) and test_data.get('created_by') == user_id
+            
+            if can_edit:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📝 {test_data['name']}",
+                        callback_data=f"start_test_{test_id}"
+                    ),
+                    InlineKeyboardButton("✏️", callback_data=f"edit_test_{test_id}")
+                ])
+            else:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📝 {test_data['name']}",
+                        callback_data=f"start_test_{test_id}"
+                    )
+                ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text(
+            "📋 <b>Mavjud testlar:</b>\n\nTestni tanlang:",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+    
     # Test tahrirlash
     elif data.startswith("edit_test_"):
         test_id = data.replace("edit_test_", "")
@@ -1512,4 +1676,191 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
         else:
             await update.message.reply_text(f"❌ Bu kanal topilmadi.")
         context.user_data['removing_channel'] = False
+
+
+async def rasch_evaluation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Rasch modeliga asoslanib talabalarni baholash"""
+    user_id = update.effective_user.id
+    data = load_data()
+    
+    # Faqat boss va adminlar foydalanishi mumkin
+    if user_id != BOSS_ID and user_id not in data.get("admins", []):
+        await update.message.reply_text("❌ Bu funksiya faqat adminlar uchun!")
+        return
+    
+    # Excel fayl kutilayotganini belgilash
+    context.user_data['waiting_for_rasch_matrix'] = True
+    
+    await update.message.reply_text(
+        "📊 Rasch modeliga asoslanib talabalarni baholash\n\n"
+        "Iltimos, .xlsx formatidagi matrix faylini yuboring.\n\n"
+        "Fayl formati:\n"
+        "- Birinchi qator: user_id, Q1, Q2, Q3, ...\n"
+        "- Keyingi qatorlar: har bir talaba uchun user_id va javoblar (0 yoki 1)\n\n"
+        "Masalan:\n"
+        "user_id | Q1 | Q2 | Q3\n"
+        "12345   | 1  | 0  | 1\n"
+        "67890   | 0  | 1  | 1"
+    )
+
+
+async def process_rasch_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Rasch matrix faylini qayta ishlash"""
+    if not context.user_data.get('waiting_for_rasch_matrix'):
+        return
+    
+    if not update.message or not update.message.document:
+        return
+    
+    document = update.message.document
+    file_name = document.file_name or "matrix.xlsx"
+    
+    # Faqat .xlsx fayllarni qabul qilish
+    if not file_name.lower().endswith('.xlsx'):
+        await update.message.reply_text(
+            "❌ Faqat .xlsx formatidagi fayllar qabul qilinadi!\n\n"
+            "Iltimos, Excel faylini (.xlsx) yuboring."
+        )
+        return
+    
+    try:
+        # Faylni yuklash
+        file = await context.bot.get_file(document.file_id)
+        
+        # Vaqtinchalik fayl sifatida saqlash
+        temp_dir = "temp_rasch"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file_path = os.path.join(temp_dir, f"rasch_matrix_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+        
+        await file.download_to_drive(temp_file_path)
+        
+        # Matrixni baholash
+        await update.message.reply_text("⏳ Matrix tahlil qilinmoqda...")
+        
+        students_results, statistics = evaluate_students_from_matrix(temp_file_path)
+        
+        if not students_results or not statistics:
+            await update.message.reply_text(
+                "❌ Matrix tahlil qilib bo'lmadi!\n\n"
+                "Iltimos, fayl formati to'g'ri ekanligini tekshiring:\n"
+                "- Birinchi qator: user_id, Q1, Q2, Q3, ...\n"
+                "- Keyingi qatorlar: user_id va javoblar (0 yoki 1)"
+            )
+            # Vaqtinchalik faylni o'chirish
+            try:
+                os.remove(temp_file_path)
+            except:
+                pass
+            context.user_data.pop('waiting_for_rasch_matrix', None)
+            return
+        
+        # Natijalarni ko'rsatish
+        text = "📊 Rasch Model Baholash Natijalari\n\n"
+        text += f"📈 Umumiy statistika:\n"
+        text += f"   Jami talabalar: {statistics['total_students']}\n"
+        text += f"   Jami savollar: {statistics['total_questions']}\n"
+        text += f"   O'rtacha foiz: {statistics['avg_percentage']:.1f}%\n"
+        text += f"   O'rtacha Rasch score: {statistics['avg_rasch_score']:.2f}\n"
+        text += f"   Eng yuqori Rasch score: {statistics['max_rasch_score']:.2f}\n"
+        text += f"   Eng past Rasch score: {statistics['min_rasch_score']:.2f}\n\n"
+        text += f"📋 Talabalar natijalari (Rasch score bo'yicha tartiblangan):\n\n"
+        
+        # Top 20 talaba
+        for idx, student in enumerate(students_results[:20], 1):
+            text += f"{idx}. User ID: {student['user_id']}\n"
+            text += f"   {student['correct']}/{student['total']} ({student['percentage']:.1f}%) | "
+            text += f"Rasch: {student['rasch_score']:.2f}\n\n"
+        
+        if statistics['total_students'] > 20:
+            text += f"... va yana {statistics['total_students'] - 20} ta talaba\n"
+        
+        # PDF yaratish
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Rasch Model Baholash Natijalari</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                h1 {{ color: #333; }}
+                .info {{ background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #4CAF50; color: white; }}
+                tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            </style>
+        </head>
+        <body>
+            <h1>Rasch Model Baholash Natijalari</h1>
+            <div class="info">
+                <p><strong>Jami talabalar:</strong> {statistics['total_students']}</p>
+                <p><strong>Jami savollar:</strong> {statistics['total_questions']}</p>
+                <p><strong>O'rtacha foiz:</strong> {statistics['avg_percentage']:.1f}%</p>
+                <p><strong>O'rtacha Rasch Score:</strong> {statistics['avg_rasch_score']:.2f}</p>
+                <p><strong>Eng yuqori Rasch Score:</strong> {statistics['max_rasch_score']:.2f}</p>
+                <p><strong>Eng past Rasch Score:</strong> {statistics['min_rasch_score']:.2f}</p>
+                <p><strong>Tahlil vaqti:</strong> {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}</p>
+            </div>
+            <h2>Barcha talabalar natijalari (Rasch score bo'yicha tartiblangan):</h2>
+            <table>
+                <tr>
+                    <th>#</th>
+                    <th>User ID</th>
+                    <th>To'g'ri javoblar</th>
+                    <th>Foiz</th>
+                    <th>Rasch Score</th>
+                </tr>
+        """
+        
+        for idx, student in enumerate(students_results, 1):
+            html_content += f"""
+                <tr>
+                    <td>{idx}</td>
+                    <td>{student['user_id']}</td>
+                    <td>{student['correct']}/{student['total']}</td>
+                    <td>{student['percentage']:.1f}%</td>
+                    <td>{student['rasch_score']:.2f}</td>
+                </tr>
+            """
+        
+        html_content += """
+            </table>
+        </body>
+        </html>
+        """
+        
+        # generate_pdf funksiyasidan foydalanish
+        pdf_file = generate_pdf(f"rasch_{datetime.now().strftime('%Y%m%d_%H%M%S')}", {
+            'html_content': html_content
+        })
+        
+        await update.message.reply_text(text)
+        
+        if pdf_file:
+            try:
+                await update.message.reply_document(
+                    document=pdf_file,
+                    filename=f"rasch_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    caption="📊 Rasch Model Baholash Natijalari (PDF)"
+                )
+            except Exception as doc_error:
+                logger.error(f"PDF yuborish xatosi: {doc_error}")
+                await update.message.reply_text("⚠️ PDF yuborib bo'lmadi, lekin natijalar yuborildi.")
+        else:
+            logger.warning("PDF yaratib bo'lmadi")
+            await update.message.reply_text("⚠️ PDF yaratib bo'lmadi, lekin natijalar yuborildi.")
+        
+        # Vaqtinchalik faylni o'chirish
+        try:
+            os.remove(temp_file_path)
+        except:
+            pass
+        
+        context.user_data.pop('waiting_for_rasch_matrix', None)
+        
+    except Exception as e:
+        logger.error(f"Rasch matrix qayta ishlash xatosi: {e}")
+        await update.message.reply_text(f"❌ Xatolik: {str(e)}")
+        context.user_data.pop('waiting_for_rasch_matrix', None)
 

@@ -14,7 +14,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import load_data
 from rasch_pkg import RaschModel
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -241,5 +241,117 @@ def generate_response_matrix(test_id, data):
         
     except Exception as e:
         logger.error(f"Matrix yaratish xatosi: {e}")
+        return None, None
+
+
+def evaluate_students_from_matrix(file_path):
+    """
+    Excel matrix faylidan talabalarni Rasch modeliga asoslanib baholash
+    
+    Args:
+        file_path: Excel fayl yo'li (.xlsx)
+    
+    Returns:
+        list: Talabalar natijalari ro'yxati
+        dict: Umumiy statistika
+    """
+    try:
+        # Excel faylni yuklash
+        wb = load_workbook(file_path)
+        ws = wb.active
+        
+        # Header qatorini o'qish
+        header_row = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+        if not header_row:
+            return None, None
+        
+        # Savollar sonini aniqlash (user_id dan tashqari)
+        question_columns = [col for col in header_row[1:] if col and str(col).startswith('Q')]
+        total_questions = len(question_columns)
+        
+        if total_questions == 0:
+            return None, None
+        
+        # Talabalar ma'lumotlarini o'qish
+        students_results = []
+        rasch_model = RaschModel()
+        
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not row or not row[0]:  # user_id bo'sh bo'lsa, o'tkazib yuborish
+                continue
+            
+            user_id = str(row[0])
+            responses = []
+            
+            # Javoblarni olish (1 yoki 0)
+            for col_idx in range(1, min(len(row), total_questions + 1)):
+                value = row[col_idx]
+                if value is None:
+                    responses.append(0)
+                elif isinstance(value, (int, float)):
+                    responses.append(1 if value == 1 else 0)
+                elif isinstance(value, str):
+                    responses.append(1 if value.strip() == '1' else 0)
+                else:
+                    responses.append(0)
+            
+            # To'g'ri javoblar soni
+            correct_count = sum(responses)
+            
+            # Rasch score hisoblash
+            try:
+                theta = rasch_model.calculate_theta(correct_count, total_questions)
+                rasch_score = float(theta)
+                rasch_score = np.clip(rasch_score, -3.0, 3.0)
+            except Exception as e:
+                logger.warning(f"Rasch hisoblash xatosi (user_id: {user_id}): {e}")
+                # Fallback: oddiy logit transformatsiya
+                p = correct_count / total_questions if total_questions > 0 else 0
+                if p > 0 and p < 1:
+                    logit = np.log(p / (1 - p))
+                    rasch_score = float(np.clip(logit, -3.0, 3.0))
+                elif p == 1:
+                    rasch_score = 3.0
+                else:
+                    rasch_score = -3.0
+            
+            # Foiz hisoblash
+            percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
+            
+            students_results.append({
+                'user_id': user_id,
+                'correct': correct_count,
+                'total': total_questions,
+                'percentage': percentage,
+                'rasch_score': rasch_score,
+                'responses': responses
+            })
+        
+        # Umumiy statistika
+        if students_results:
+            total_students = len(students_results)
+            avg_percentage = sum(s['percentage'] for s in students_results) / total_students
+            avg_rasch = sum(s['rasch_score'] for s in students_results) / total_students
+            max_rasch = max(s['rasch_score'] for s in students_results)
+            min_rasch = min(s['rasch_score'] for s in students_results)
+            
+            statistics = {
+                'total_students': total_students,
+                'total_questions': total_questions,
+                'avg_percentage': avg_percentage,
+                'avg_rasch_score': avg_rasch,
+                'max_rasch_score': max_rasch,
+                'min_rasch_score': min_rasch
+            }
+        else:
+            statistics = None
+        
+        # Rasch score bo'yicha tartiblash
+        students_results.sort(key=lambda x: x['rasch_score'], reverse=True)
+        
+        return students_results, statistics
+        
+    except Exception as e:
+        logger.error(f"Matrix baholash xatosi: {e}")
         return None, None
 

@@ -32,6 +32,8 @@ from handlers import (
     process_admin_channel_commands,
     process_user_name,
     check_user_name,
+    rasch_evaluation,
+    process_rasch_matrix,
 )
 
 # Logging sozlash
@@ -53,15 +55,24 @@ def main():
     application.add_handler(CommandHandler("createtest", create_test))
     application.add_handler(CommandHandler("tests", list_tests))
     application.add_handler(CommandHandler("myresults", my_results))
+    application.add_handler(CommandHandler("rasch", rasch_evaluation))
     application.add_handler(CommandHandler("cancel", lambda u, c: c.user_data.clear()))
     
     # Callback handler
     application.add_handler(CallbackQueryHandler(callback_handler))
     
-    # Document handler (test faylini qabul qilish uchun)
+    # Document handler (test faylini va rasch matrix faylini qabul qilish uchun)
+    async def document_handler(update, context):
+        # Avval rasch matrix tekshiruvi
+        if context.user_data.get('waiting_for_rasch_matrix'):
+            await process_rasch_matrix(update, context)
+            return
+        # Keyin test fayl tekshiruvi
+        await process_test_file(update, context)
+    
     application.add_handler(MessageHandler(
         filters.Document.ALL,
-        process_test_file
+        document_handler
     ))
     
     # Message handler (test yaratish, test javoblari va admin/kanal boshqaruvi uchun)
