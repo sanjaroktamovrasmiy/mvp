@@ -1,0 +1,15 @@
+data.json
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+*.pdf
+config.py
+bot.log
+*.xlsx
+matrices/
+test_files/
+
