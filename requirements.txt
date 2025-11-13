@@ -3,6 +3,7 @@ pdfkit==1.0.0
 numpy>=1.21.0
 scipy>=1.7.0
 pytz>=2023.3
-rasch-pkg>=0.1.0
 openpyxl>=3.1.0
+reportlab>=3.6.0
+rpy2>=3.5.0
 

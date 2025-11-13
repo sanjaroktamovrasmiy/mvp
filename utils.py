@@ -6,6 +6,9 @@ Yordamchi funksiyalar
 
 import logging
 import os
+import re
+import shutil
+import textwrap
 import pdfkit
 import numpy as np
 from io import BytesIO
@@ -111,48 +114,96 @@ def calculate_rasch_score(results, questions):
 
 
 def generate_pdf(result_id, result_data):
-    """PDF fayl yaratish"""
+    """PDF fayl yaratish (pdfkit + reportlab fallback)"""
+    html_content = None
+    fallback_lines = result_data.get('fallback_lines')
+    fallback_title = result_data.get('fallback_title') or result_data.get('test_name') or "Natijalar hisobot"
+    
     try:
-        # Agar html_content to'g'ridan-to'g'ri berilgan bo'lsa (finalize_test uchun)
         if 'html_content' in result_data:
             html_content = result_data['html_content']
         else:
-            # Oddiy natija PDF (foydalanuvchi uchun)
-            html_content = f"""
+            # Oddiy foydalanuvchi natijasi uchun HTML yaratamiz
+            html_content = _build_default_result_html(result_data)
+            if fallback_lines is None:
+                fallback_lines = _build_fallback_lines_from_result(result_data)
+        
+        # Avval pdfkit orqali urinib ko'ramiz (wkhtmltopdf talab qiladi)
+        if html_content:
+            try:
+                config = None
+                wkhtml_path = shutil.which("wkhtmltopdf")
+                if wkhtml_path:
+                    config = pdfkit.configuration(wkhtmltopdf=wkhtml_path)
+                pdf_bytes = pdfkit.from_string(
+                    html_content,
+                    False,
+                    configuration=config,
+                    options={
+                        'page-size': 'A4',
+                        'encoding': 'UTF-8',
+                        'no-outline': None,
+                        'enable-local-file-access': None
+                    }
+                )
+                return BytesIO(pdf_bytes)
+            except Exception as pdf_error:
+                logger.error(f"PDF yaratish xatosi (pdfkit): {pdf_error}")
+                # pdfkit ishlamasa, fallbackga o'tamiz
+                if fallback_lines is None:
+                    fallback_lines = _html_to_plain_text_lines(html_content)
+        
+        # Agar html_content mavjud bo'lmasa yoki pdfkit ishlamasa - fallback
+        if fallback_lines is None:
+            if html_content:
+                fallback_lines = _html_to_plain_text_lines(html_content)
+            else:
+                fallback_lines = ["Hisobotni yaratib bo'lmadi."]
+        
+        return _generate_pdf_with_reportlab(fallback_title, fallback_lines)
+    
+    except Exception as e:
+        logger.error(f"PDF yaratish xatosi: {e}")
+        return None
+
+
+def _build_default_result_html(result_data):
+    """Oddiy foydalanuvchi natijasi uchun HTML yaratish"""
+    try:
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <title>Test Natijasi</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                h1 {{ color: #333; }}
-                .info {{ background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                .result {{ margin: 20px 0; }}
-                .question {{ margin: 15px 0; padding: 10px; background: #fff; border-left: 3px solid #007bff; }}
-                .correct {{ color: green; }}
-                .incorrect {{ color: red; }}
+                body {{ font-family: Arial, sans-serif; padding: 24px; }}
+                h1 {{ color: #2c3e50; }}
+                .info {{ background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 6px; }}
+                .question {{ margin: 15px 0; padding: 12px; background: #fff; border-left: 3px solid #007bff; border-radius: 4px; }}
+                .correct {{ color: #2ecc71; }}
+                .incorrect {{ color: #e74c3c; }}
             </style>
         </head>
         <body>
             <h1>Test Natijasi</h1>
             <div class="info">
-                <p><strong>Test nomi:</strong> {result_data['test_name']}</p>
-                <p><strong>Sana:</strong> {result_data['completed_at']}</p>
-                <p><strong>To'g'ri javoblar:</strong> {result_data['correct']}/{result_data['total']}</p>
-                <p><strong>Foiz:</strong> {result_data['percentage']:.1f}%</p>
-                <p><strong>Rasch Score:</strong> {result_data['rasch_score']:.2f}</p>
+                <p><strong>Test nomi:</strong> {result_data.get('test_name', "Noma'lum")}</p>
+                <p><strong>Sana:</strong> {result_data.get('completed_at', '')}</p>
+                <p><strong>To'g'ri javoblar:</strong> {result_data.get('correct', 0)}/{result_data.get('total', 0)}</p>
+                <p><strong>Foiz:</strong> {result_data.get('percentage', 0):.1f}%</p>
+                <p><strong>Rasch Score:</strong> {result_data.get('rasch_score', 0.0):.2f}</p>
             </div>
             <h2>Javoblar tafsiloti:</h2>
         """
         
-        for idx, res in enumerate(result_data['results'], 1):
-            status = "✅ To'g'ri" if res['is_correct'] else "❌ Noto'g'ri"
-            status_class = "correct" if res['is_correct'] else "incorrect"
+        for idx, res in enumerate(result_data.get('results', []), 1):
+            status = "✅ To'g'ri" if res.get('is_correct') else "❌ Noto'g'ri"
+            status_class = "correct" if res.get('is_correct') else "incorrect"
             html_content += f"""
             <div class="question">
-                <p><strong>Savol {idx}:</strong> {res['question']}</p>
-                <p class="{status_class}"><strong>Javobingiz:</strong> {res['user_answer']} | <strong>To'g'ri javob:</strong> {res['correct_answer']} | {status}</p>
+                <p><strong>Savol {idx}:</strong> {res.get('question', '')}</p>
+                <p class="{status_class}"><strong>Javobingiz:</strong> {res.get('user_answer', '')} | <strong>To'g'ri javob:</strong> {res.get('correct_answer', '')} | {status}</p>
             </div>
             """
         
@@ -160,22 +211,105 @@ def generate_pdf(result_id, result_data):
         </body>
         </html>
         """
-        
-        # PDF yaratish
-        try:
-            pdf_bytes = pdfkit.from_string(html_content, False, options={
-                'page-size': 'A4',
-                'encoding': 'UTF-8',
-                'no-outline': None,
-                'enable-local-file-access': None
-            })
-            return BytesIO(pdf_bytes)
-        except Exception as pdf_error:
-            logger.error(f"PDF yaratish xatosi: {pdf_error}")
-            # Agar PDF yaratib bo'lmasa, None qaytaramiz
-            return None
+        return html_content
     except Exception as e:
-        logger.error(f"PDF yaratish xatosi: {e}")
+        logger.error(f"HTML yaratish xatosi: {e}")
+        return None
+
+
+def _build_fallback_lines_from_result(result_data):
+    """Oddiy foydalanuvchi natijasi uchun fallback matn"""
+    lines = []
+    try:
+        test_name = result_data.get('test_name')
+        if test_name:
+            lines.append(f"Test nomi: {test_name}")
+        completed_at = result_data.get('completed_at')
+        if completed_at:
+            lines.append(f"Sana: {completed_at}")
+        correct = result_data.get('correct')
+        total = result_data.get('total')
+        if correct is not None and total is not None:
+            lines.append(f"Natija: {correct}/{total} savol to'g'ri")
+        percentage = result_data.get('percentage')
+        if percentage is not None:
+            lines.append(f"Foiz: {percentage:.1f}%")
+        rasch_score = result_data.get('rasch_score')
+        if rasch_score is not None:
+            lines.append(f"Rasch score: {rasch_score:.2f}")
+        lines.append("")
+        lines.append("Javoblar tafsiloti:")
+        for idx, res in enumerate(result_data.get('results', []), 1):
+            status = "To'g'ri" if res.get('is_correct') else "Noto'g'ri"
+            lines.append(f"Savol {idx}: {res.get('question', '')}")
+            lines.append(
+                f"  Javobingiz: {res.get('user_answer', '-')}, To'g'ri javob: {res.get('correct_answer', '-')}, {status}"
+            )
+        return lines
+    except Exception as e:
+        logger.error(f"Fallback matn yaratish xatosi: {e}")
+        return ["Natijalar mavjud emas."]
+
+
+def _html_to_plain_text_lines(html_content):
+    """HTML matnini oddiy matn satrlariga aylantirish"""
+    try:
+        if not html_content:
+            return []
+        # Taglarni yangi qator bilan almashtirish
+        html = re.sub(r'<\s*(br|BR)\s*/?>', '\n', html_content)
+        html = re.sub(r'</\s*(p|div|tr|h[1-6]|li|ul|ol|table|thead|tbody|tfoot)>', '\n', html)
+        html = re.sub(r'<\s*li\s*>', '• ', html)
+        text = re.sub(r'<[^>]+>', '', html)
+        lines = [line.strip() for line in text.splitlines()]
+        return [line for line in lines if line]
+    except Exception as e:
+        logger.error(f"HTML ni oddiy matnga o'tkazish xatosi: {e}")
+        return []
+
+
+def _generate_pdf_with_reportlab(title, lines):
+    """Reportlab orqali oddiy PDF yaratish"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm
+    except Exception as import_error:
+        logger.error(f"Reportlab kutubxonasini import qilib bo'lmadi: {import_error}")
+        return None
+    
+    try:
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        x_margin = 20 * mm
+        y_margin = 20 * mm
+        y_position = height - y_margin
+        
+        # Sarlavha
+        if title:
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(x_margin, y_position, str(title))
+            y_position -= 18
+        
+        c.setFont("Helvetica", 11)
+        line_height = 13
+        
+        for raw_line in lines:
+            wrapped_lines = textwrap.wrap(str(raw_line), width=90) or ['']
+            for line in wrapped_lines:
+                if y_position < y_margin:
+                    c.showPage()
+                    c.setFont("Helvetica", 11)
+                    y_position = height - y_margin
+                c.drawString(x_margin, y_position, line)
+                y_position -= line_height
+        
+        c.save()
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        logger.error(f"Reportlab orqali PDF yaratish xatosi: {e}")
         return None
 
 
@@ -247,6 +381,7 @@ def generate_response_matrix(test_id, data):
 def evaluate_students_from_matrix(file_path):
     """
     Excel matrix faylidan talabalarni Rasch modeliga asoslanib baholash
+    T = 50 + 10Z formulasi bilan standart ball hisoblash
     
     Args:
         file_path: Excel fayl yo'li (.xlsx)
@@ -272,15 +407,16 @@ def evaluate_students_from_matrix(file_path):
         if total_questions == 0:
             return None, None
         
-        # Talabalar ma'lumotlarini o'qish
-        students_results = []
-        rasch_model = RaschModel()
+        # Response matrix yaratish
+        response_matrix = []
+        user_ids = []
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             if not row or not row[0]:  # user_id bo'sh bo'lsa, o'tkazib yuborish
                 continue
             
             user_id = str(row[0])
+            user_ids.append(user_id)
             responses = []
             
             # Javoblarni olish (1 yoki 0)
@@ -295,63 +431,33 @@ def evaluate_students_from_matrix(file_path):
                 else:
                     responses.append(0)
             
-            # To'g'ri javoblar soni
-            correct_count = sum(responses)
+            # Agar javoblar soni etarli bo'lmasa, 0 bilan to'ldirish
+            while len(responses) < total_questions:
+                responses.append(0)
             
-            # Rasch score hisoblash
-            try:
-                theta = rasch_model.calculate_theta(correct_count, total_questions)
-                rasch_score = float(theta)
-                rasch_score = np.clip(rasch_score, -3.0, 3.0)
-            except Exception as e:
-                logger.warning(f"Rasch hisoblash xatosi (user_id: {user_id}): {e}")
-                # Fallback: oddiy logit transformatsiya
-                p = correct_count / total_questions if total_questions > 0 else 0
-                if p > 0 and p < 1:
-                    logit = np.log(p / (1 - p))
-                    rasch_score = float(np.clip(logit, -3.0, 3.0))
-                elif p == 1:
-                    rasch_score = 3.0
-                else:
-                    rasch_score = -3.0
-            
-            # Foiz hisoblash
-            percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
-            
-            students_results.append({
-                'user_id': user_id,
-                'correct': correct_count,
-                'total': total_questions,
-                'percentage': percentage,
-                'rasch_score': rasch_score,
-                'responses': responses
-            })
+            response_matrix.append(responses)
         
-        # Umumiy statistika
-        if students_results:
-            total_students = len(students_results)
-            avg_percentage = sum(s['percentage'] for s in students_results) / total_students
-            avg_rasch = sum(s['rasch_score'] for s in students_results) / total_students
-            max_rasch = max(s['rasch_score'] for s in students_results)
-            min_rasch = min(s['rasch_score'] for s in students_results)
-            
-            statistics = {
-                'total_students': total_students,
-                'total_questions': total_questions,
-                'avg_percentage': avg_percentage,
-                'avg_rasch_score': avg_rasch,
-                'max_rasch_score': max_rasch,
-                'min_rasch_score': min_rasch
-            }
-        else:
-            statistics = None
+        if not response_matrix:
+            return None, None
         
-        # Rasch score bo'yicha tartiblash
-        students_results.sort(key=lambda x: x['rasch_score'], reverse=True)
+        # Response matrix ni numpy array ga aylantirish
+        response_matrix = np.array(response_matrix)
+        
+        # Rasch modelini import qilish va baholash
+        from rasch_pkg import evaluate_with_rasch
+        
+        # Rasch model orqali to'liq baholash (fit qilish)
+        students_results, statistics = evaluate_with_rasch(response_matrix, user_ids)
+        
+        if students_results is None or statistics is None:
+            logger.error("Rasch model baholash muvaffaqiyatsiz tugadi")
+            return None, None
         
         return students_results, statistics
         
     except Exception as e:
         logger.error(f"Matrix baholash xatosi: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None, None
 
