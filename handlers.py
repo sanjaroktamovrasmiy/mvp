@@ -834,41 +834,71 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     )
                     return
             
-            # 36-40 savollar uchun yozma javoblarni tekshirish
-            if len(text_answers) < 5:
-                # Agar yozma javoblar yetarli bo'lmasa, alohida so'rash
+            # 36-40 savollar uchun yozma javoblarni tekshirish (IXTIYORIY)
+            # Agar kiritilgan bo'lsa, faqat kiritilganlarni saqlash
+            # Agar kiritilmagan bo'lsa (0 ta), avtomatik ravishda vaqt belgilashga o'tish
+            
+            if len(text_answers) == 0:
+                # Hech qanday yozma javob kiritilmagan - bu normal, davom etamiz
+                # 36-40 savollar yo'q deb hisoblaymiz
+                context.user_data['mc_answers'] = mc_answers_list
+                context.user_data['test_creation_step'] = 'start_time'
+                
+                # Hozirgi vaqtni ko'rsatish
+                now_uz = datetime.now(UZBEKISTAN_TZ)
+                current_time = now_uz.strftime('%d.%m.%Y %H:%M')
+                
+                keyboard = [
+                    [InlineKeyboardButton("⚡ Hozir", callback_data="time_now")],
+                    [
+                        InlineKeyboardButton("15 min", callback_data="time_15m"),
+                        InlineKeyboardButton("30 min", callback_data="time_30m"),
+                        InlineKeyboardButton("1 soat", callback_data="time_1h")
+                    ],
+                    [InlineKeyboardButton("📝 Boshqa vaqt kiritish", callback_data="time_custom")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                    f"ℹ️ 36-40 savollar uchun yozma javoblar kiritilmadi (bu normal).\n\n"
+                    f"📅 Test boshlanish vaqtini belgilang:\n\n"
+                    f"🕐 Hozirgi vaqt: {current_time}\n\n"
+                    f"Quyidagi variantlardan birini tanlang:",
+                    reply_markup=reply_markup
+                )
+                return
+            elif len(text_answers) < 5:
+                # Ba'zi yozma javoblar kiritilgan, lekin barcha emas
+                # Qolgan javoblarni so'rash (lekin MAJBURIY emas)
                 context.user_data['test_creation_step'] = 'text_answers'
                 context.user_data['mc_answers'] = mc_answers_list
                 
                 missing = [q for q in range(36, 41) if q not in text_answers]
                 if missing:
+                    keyboard = [
+                        [InlineKeyboardButton("⏭️ Qolgan javoblarni o'tkazib yuborish", callback_data="skip_text_answers")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
                     await update.message.reply_text(
                         f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
                         f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
                         f"⚠️ Quyidagi savollar uchun javoblar kerak: {', '.join(map(str, missing))}\n\n"
                         f"Har bir savol uchun alohida qatorda javob yozing yoki qavs ichida kiriting:\n"
                         f"Masalan:\n"
-                        f"36savol javobi\n"
-                        f"37savol javobi\n"
-                        f"..."
+                        f"38savol javobi\n"
+                        f"39savol javobi\n\n"
+                        f"📌 Yoki qolgan javoblarni o'tkazib yuborishingiz mumkin:",
+                        reply_markup=reply_markup
                     )
                     return
             else:
-                # Barcha javoblar mavjud
+                # Barcha 5 ta yozma javob kiritilgan
                 text_answers_list = []
                 for q_num in range(36, 41):
                     if q_num in text_answers:
                         text_answers_list.append(text_answers[q_num])
-                    else:
-                        # Agar biror savol uchun javob bo'lmasa, alohida so'rash
-                        context.user_data['test_creation_step'] = 'text_answers'
-                        context.user_data['mc_answers'] = mc_answers_list
-                        await update.message.reply_text(
-                            f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
-                            f"📝 {q_num}-savol uchun javob topilmadi.\n"
-                            f"36-40 savollar uchun yozma javoblarni kiriting:"
-                        )
-                        return
                 
                 # Barcha javoblar mavjud, keyingi bosqichga o'tish
                 context.user_data['mc_answers'] = mc_answers_list
@@ -2038,6 +2068,39 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• \"14:30\" - bugungi kunda 14:30 da\n"
             "• \"12-25 14:30\" - eski format (oy-kun soat:daqiqa)\n\n"
             "Yoki /cancel ni bosing."
+        )
+    # Skip text answers (36-40)
+    elif data == "skip_text_answers":
+        # 36-40 savollar uchun javoblarni o'tkazib yuborish
+        mc_answers_list = context.user_data.get('mc_answers', [])
+        if not mc_answers_list:
+            await query.answer("❌ Xatolik: javoblar topilmadi!", show_alert=True)
+            return
+        
+        context.user_data['test_creation_step'] = 'start_time'
+        
+        # Hozirgi vaqtni ko'rsatish
+        now_uz = datetime.now(UZBEKISTAN_TZ)
+        current_time = now_uz.strftime('%d.%m.%Y %H:%M')
+        
+        keyboard = [
+            [InlineKeyboardButton("⚡ Hozir", callback_data="time_now")],
+            [
+                InlineKeyboardButton("15 min", callback_data="time_15m"),
+                InlineKeyboardButton("30 min", callback_data="time_30m"),
+                InlineKeyboardButton("1 soat", callback_data="time_1h")
+            ],
+            [InlineKeyboardButton("📝 Boshqa vaqt kiritish", callback_data="time_custom")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+            f"ℹ️ 36-40 savollar uchun yozma javoblar o'tkazib yuborildi.\n\n"
+            f"📅 Test boshlanish vaqtini belgilang:\n\n"
+            f"🕐 Hozirgi vaqt: {current_time}\n\n"
+            f"Quyidagi variantlardan birini tanlang:",
+            reply_markup=reply_markup
         )
     
     # Test tahrirlash
