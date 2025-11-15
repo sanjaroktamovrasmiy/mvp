@@ -7,7 +7,7 @@ Bot handler funksiyalari
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from io import BytesIO
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -473,6 +473,112 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
 
 
+async def process_time_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, start_time):
+    """Vaqt tanlangandan keyin testni saqlash"""
+    user_id = update.effective_user.id
+    
+    # Vaqtni tekshirish (o'tmish bo'lmasligi kerak)
+    now_uz = datetime.now(UZBEKISTAN_TZ)
+    if start_time < now_uz:
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                "❌ Test boshlanish vaqti o'tmish bo'lishi mumkin emas!\n\n"
+                f"Hozirgi vaqt: {now_uz.strftime('%d.%m.%Y %H:%M')}\n"
+                "Qayta tanlang:"
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Test boshlanish vaqti o'tmish bo'lishi mumkin emas!\n\n"
+                f"Hozirgi vaqt: {now_uz.strftime('%d.%m.%Y %H:%M')}"
+            )
+        return
+    
+    # Testni saqlash
+    data = load_data()
+    test_id = f"test_{len(data['tests']) + 1}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    test_data = {
+        'name': context.user_data['test_name'],
+        'questions': context.user_data['test_questions'],
+        'created_by': user_id,
+        'created_at': datetime.now(UZBEKISTAN_TZ).isoformat(),
+        'start_time': start_time.isoformat()
+    }
+    # Agar fayl yuklangan bo'lsa, faylni test ID bilan qayta nomlash
+    if 'test_file_path' in context.user_data:
+        old_file_path = context.user_data['test_file_path']
+        test_files_dir = "test_files"
+        file_name = context.user_data.get('test_file_name', 'test.txt')
+        # Fayl kengaytmasini saqlash
+        file_ext = os.path.splitext(file_name)[1] or '.txt'
+        new_file_path = os.path.join(test_files_dir, f"{test_id}{file_ext}")
+        
+        # Faylni qayta nomlash
+        if os.path.exists(old_file_path):
+            os.rename(old_file_path, new_file_path)
+            test_data['file_path'] = new_file_path
+        else:
+            test_data['file_path'] = old_file_path
+        test_data['file_name'] = file_name
+    data['tests'][test_id] = test_data
+    save_data(data)
+    
+    test_name = context.user_data.get('test_name', 'Noma\'lum')
+    test_questions = context.user_data.get('test_questions', [])
+    
+    # Test post yaratish va yuborish
+    # Bot username ni olish
+    try:
+        bot_info = await context.bot.get_me()
+        bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
+    except:
+        bot_username = "Test Bot"
+    
+    post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
+    
+    start_time_str = start_time.strftime('%d.%m.%Y %H:%M')
+    
+    # Xabar yuborish
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            f"✅ Test muvaffaqiyatli yaratildi!\n\n"
+            f"Test ID: {test_id}\n"
+            f"Test nomi: {test_name}\n"
+            f"Savollar soni: {len(test_questions)}\n"
+            f"Boshlanish vaqti: {start_time_str}"
+        )
+        await update.callback_query.message.reply_text(
+            post_text,
+            parse_mode='HTML',
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            post_text,
+            parse_mode='HTML',
+            reply_markup=reply_markup
+        )
+    
+    # Test yaratildi xabari
+    if update.callback_query:
+        await update.callback_query.message.reply_text(
+            f"✅ Test muvaffaqiyatli yaratildi!\n\n"
+            f"Test ID: {test_id}\n"
+            f"Test nomi: {test_name}\n"
+            f"Savollar soni: {len(test_questions)}\n"
+            f"Boshlanish vaqti: {start_time_str}"
+        )
+    else:
+        await update.message.reply_text(
+            f"✅ Test muvaffaqiyatli yaratildi!\n\n"
+            f"Test ID: {test_id}\n"
+            f"Test nomi: {test_name}\n"
+            f"Savollar soni: {len(test_questions)}\n"
+            f"Boshlanish vaqti: {start_time_str}"
+        )
+    
+    context.user_data.clear()
+
+
 async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test yaratish jarayonini qayta ishlash"""
     if not context.user_data.get('creating_test'):
@@ -567,15 +673,26 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             
             # Hozirgi vaqtni ko'rsatish (O'zbekiston vaqti)
             now_uz = datetime.now(UZBEKISTAN_TZ)
-            current_time = now_uz.strftime('%m-%d %H:%M')
+            current_time = now_uz.strftime('%d.%m.%Y %H:%M')
+            
+            # Inline keyboard yaratish - tez variantlar
+            keyboard = [
+                [InlineKeyboardButton("⚡ Hozir", callback_data="time_now")],
+                [
+                    InlineKeyboardButton("15 min", callback_data="time_15m"),
+                    InlineKeyboardButton("30 min", callback_data="time_30m"),
+                    InlineKeyboardButton("1 soat", callback_data="time_1h")
+                ],
+                [InlineKeyboardButton("📝 Boshqa vaqt kiritish", callback_data="time_custom")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
                 f"✅ Javoblar saqlandi!\n\n"
-                f"📅 Test boshlanish vaqtini belgilang (O'zbekiston vaqti):\n\n"
-                f"Hozirgi vaqt: {current_time}\n\n"
-                f"Format: MM-DD HH:MM\n"
-                f"Masalan: 12-25 14:30\n\n"
-                f"Yoki 'hozir' deb yozing testni darhol boshlash uchun."
+                f"📅 Test boshlanish vaqtini belgilang:\n\n"
+                f"🕐 Hozirgi vaqt: {current_time}\n\n"
+                f"Quyidagi variantlardan birini tanlang:",
+                reply_markup=reply_markup
             )
             return
         
@@ -584,7 +701,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
     
     elif step == 'start_time':
-        # Test boshlanish vaqti kiritildi
+        # Test boshlanish vaqti kiritildi (faqat custom vaqt kiritganda)
         time_input = update.message.text.strip().lower()
         if time_input == '/cancel':
             context.user_data.clear()
@@ -592,134 +709,84 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             return
         
         try:
-            # Agar 'hozir' deb yozilgan bo'lsa
+            now_uz = datetime.now(UZBEKISTAN_TZ)
+            start_time = None
+            
+            # Sodda formatlar
             if time_input == 'hozir' or time_input == 'now':
-                start_time = datetime.now(UZBEKISTAN_TZ)
-            else:
-                # Vaqtni parse qilish (MM-DD HH:MM formatida)
+                start_time = now_uz
+            elif time_input.endswith('m') or time_input.endswith('min'):
+                # Daqiqalar: "15m", "30min" kabi
                 try:
-                    # Format: MM-DD HH:MM
+                    minutes = int(time_input.rstrip('min').rstrip('m').strip())
+                    start_time = now_uz + timedelta(minutes=minutes)
+                except ValueError:
+                    pass
+            elif time_input.endswith('h') or time_input.endswith('soat'):
+                # Soatlar: "1h", "2soat" kabi
+                try:
+                    hours = int(time_input.rstrip('soat').rstrip('h').strip())
+                    start_time = now_uz + timedelta(hours=hours)
+                except ValueError:
+                    pass
+            elif ':' in time_input:
+                # Faqat vaqt formatida (HH:MM) - bugungi kunda
+                try:
+                    hour, minute = map(int, time_input.split(':'))
+                    today = now_uz.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    # Agar bu vaqt o'tmish bo'lsa, ertaga qo'yamiz
+                    if today <= now_uz:
+                        today = today + timedelta(days=1)
+                    start_time = today
+                except ValueError:
+                    pass
+            elif ' ' in time_input:
+                # Eski format (MM-DD HH:MM)
+                try:
                     time_parts = time_input.split()
-                    if len(time_parts) != 2:
-                        raise ValueError("Noto'g'ri format")
-                    
-                    date_part = time_parts[0]  # MM-DD
-                    time_part = time_parts[1]  # HH:MM
-                    
-                    month, day = map(int, date_part.split('-'))
-                    hour, minute = map(int, time_part.split(':'))
-                    
-                    # Hozirgi yilni olish
-                    now_uz = datetime.now(UZBEKISTAN_TZ)
-                    year = now_uz.year
-                    
-                    # Vaqtni yaratish
-                    start_time = datetime(year, month, day, hour, minute)
-                    start_time = UZBEKISTAN_TZ.localize(start_time)
-                    
-                    # Agar o'tmish bo'lsa, keyingi yilga o'tkazish
-                    if start_time < now_uz:
-                        start_time = datetime(year + 1, month, day, hour, minute)
+                    if len(time_parts) == 2:
+                        date_part = time_parts[0]  # MM-DD
+                        time_part = time_parts[1]  # HH:MM
+                        
+                        month, day = map(int, date_part.split('-'))
+                        hour, minute = map(int, time_part.split(':'))
+                        
+                        year = now_uz.year
+                        start_time = datetime(year, month, day, hour, minute)
                         start_time = UZBEKISTAN_TZ.localize(start_time)
-                    
+                        
+                        # Agar o'tmish bo'lsa, keyingi yilga o'tkazish
+                        if start_time < now_uz:
+                            start_time = datetime(year + 1, month, day, hour, minute)
+                            start_time = UZBEKISTAN_TZ.localize(start_time)
                 except (ValueError, IndexError):
-                    await update.message.reply_text(
-                        "❌ Noto'g'ri format!\n\n"
-                        "Format: MM-DD HH:MM\n"
-                        "Masalan: 12-25 14:30"
-                    )
-                    return
+                    pass
+            
+            if start_time is None:
+                await update.message.reply_text(
+                    "❌ Noto'g'ri format!\n\n"
+                    "✅ Qulay variantlar:\n"
+                    "• \"hozir\" - darhol\n"
+                    "• \"15m\" yoki \"15 min\" - 15 daqiqadan keyin\n"
+                    "• \"1h\" yoki \"1 soat\" - 1 soatdan keyin\n"
+                    "• \"14:30\" - bugungi kunda 14:30 da\n"
+                    "• \"12-25 14:30\" - eski format (oy-kun soat:daqiqa)\n\n"
+                    "Yoki /cancel ni bosing."
+                )
+                return
             
             # Vaqtni tekshirish (o'tmish bo'lmasligi kerak)
             now_uz = datetime.now(UZBEKISTAN_TZ)
             if start_time < now_uz:
                 await update.message.reply_text(
                     "❌ Test boshlanish vaqti o'tmish bo'lishi mumkin emas!\n\n"
-                    f"Hozirgi vaqt: {now_uz.strftime('%m-%d %H:%M')}\n"
+                    f"Hozirgi vaqt: {now_uz.strftime('%d.%m.%Y %H:%M')}\n"
                     "Qayta kiriting:"
                 )
                 return
             
             # Testni saqlash
-            data = load_data()
-            test_id = f"test_{len(data['tests']) + 1}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            test_data = {
-                'name': context.user_data['test_name'],
-                'questions': context.user_data['test_questions'],
-                'created_by': user_id,
-                'created_at': datetime.now(UZBEKISTAN_TZ).isoformat(),
-                'start_time': start_time.isoformat()
-            }
-            # Agar fayl yuklangan bo'lsa, faylni test ID bilan qayta nomlash
-            if 'test_file_path' in context.user_data:
-                old_file_path = context.user_data['test_file_path']
-                test_files_dir = "test_files"
-                file_name = context.user_data.get('test_file_name', 'test.txt')
-                # Fayl kengaytmasini saqlash
-                file_ext = os.path.splitext(file_name)[1] or '.txt'
-                new_file_path = os.path.join(test_files_dir, f"{test_id}{file_ext}")
-                
-                # Faylni qayta nomlash
-                if os.path.exists(old_file_path):
-                    os.rename(old_file_path, new_file_path)
-                    test_data['file_path'] = new_file_path
-                else:
-                    test_data['file_path'] = old_file_path
-                test_data['file_name'] = file_name
-            data['tests'][test_id] = test_data
-            save_data(data)
-            
-            test_name = context.user_data.get('test_name', 'Noma\'lum')
-            test_questions = context.user_data.get('test_questions', [])
-            
-            # Test post yaratish va yuborish
-            # Bot username ni olish
-            try:
-                bot_info = await context.bot.get_me()
-                bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
-            except:
-                bot_username = "Test Bot"
-            
-            post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
-            
-            # Postni yuborish (inline keyboard bilan)
-            try:
-                await update.message.reply_text(
-                    post_text,
-                    parse_mode='HTML',
-                    reply_markup=reply_markup
-                )
-            except Exception as post_error:
-                logger.error(f"Post yuborish xatosi: {post_error}")
-                # Agar HTML parse xatosi bo'lsa, oddiy matn sifatida yuborish
-                try:
-                    await update.message.reply_text(
-                        post_text.replace('<b>', '').replace('</b>', '')
-                        .replace('<code>', '').replace('</code>', ''),
-                        reply_markup=reply_markup
-                    )
-                except:
-                    await update.message.reply_text(
-                        post_text.replace('<b>', '').replace('</b>', '')
-                        .replace('<code>', '').replace('</code>', '')
-                    )
-            
-            context.user_data.clear()
-            
-            # Postni ko'rsatish uchun inline keyboard qo'shish
-            share_keyboard = [
-                [InlineKeyboardButton("📢 Ulashish", callback_data=f"view_post_{test_id}")]
-            ]
-            share_markup = InlineKeyboardMarkup(share_keyboard)
-            
-            await update.message.reply_text(
-                f"✅ Test muvaffaqiyatli yaratildi!\n\n"
-                f"Test ID: {test_id}\n"
-                f"Test nomi: {test_name}\n"
-                f"Savollar soni: {len(test_questions)}\n\n"
-                f"📋 Postni ko'rish uchun quyidagi tugmani bosing:",
-                reply_markup=share_markup
-            )
+            await process_time_selection(update, context, start_time)
             
         except Exception as e:
             logger.error(f"Javoblar qayta ishlash xatosi: {e}")
@@ -920,7 +987,6 @@ async def edit_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id:
         [InlineKeyboardButton("📄 Test faylini qayta yuklash", callback_data=f"edit_file_{test_id}")],
         [InlineKeyboardButton("✅ Javoblarni o'zgartirish", callback_data=f"edit_answers_{test_id}")],
         [InlineKeyboardButton("📅 Boshlanish vaqtini o'zgartirish", callback_data=f"edit_start_time_{test_id}")],
-        [InlineKeyboardButton("📢 Ulashish", callback_data=f"view_post_{test_id}")],
         [InlineKeyboardButton("📊 Testni natijalash", callback_data=f"finalize_test_{test_id}")],
         [InlineKeyboardButton("📋 0-1 Matrix yuklab olish", callback_data=f"download_matrix_{test_id}")],
         [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_edit")]
@@ -1607,6 +1673,37 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📋 <b>Mavjud testlar:</b>\n\nTestni tanlang:",
             reply_markup=reply_markup,
             parse_mode='HTML'
+        )
+    
+    # Test boshlanish vaqti tanlash (inline keyboard)
+    elif data == "time_now":
+        # Darhol boshlash
+        context.user_data['test_creation_step'] = 'start_time'
+        await process_time_selection(update, context, datetime.now(UZBEKISTAN_TZ))
+    elif data == "time_15m":
+        # 15 daqiqadan keyin
+        context.user_data['test_creation_step'] = 'start_time'
+        await process_time_selection(update, context, datetime.now(UZBEKISTAN_TZ) + timedelta(minutes=15))
+    elif data == "time_30m":
+        # 30 daqiqadan keyin
+        context.user_data['test_creation_step'] = 'start_time'
+        await process_time_selection(update, context, datetime.now(UZBEKISTAN_TZ) + timedelta(minutes=30))
+    elif data == "time_1h":
+        # 1 soatdan keyin
+        context.user_data['test_creation_step'] = 'start_time'
+        await process_time_selection(update, context, datetime.now(UZBEKISTAN_TZ) + timedelta(hours=1))
+    elif data == "time_custom":
+        # Boshqa vaqt kiritish
+        context.user_data['test_creation_step'] = 'start_time'
+        await query.edit_message_text(
+            "📝 Boshqa vaqt kiriting:\n\n"
+            "✅ Qulay formatlar:\n"
+            "• \"hozir\" - darhol\n"
+            "• \"15m\" yoki \"15 min\" - 15 daqiqadan keyin\n"
+            "• \"1h\" yoki \"1 soat\" - 1 soatdan keyin\n"
+            "• \"14:30\" - bugungi kunda 14:30 da\n"
+            "• \"12-25 14:30\" - eski format (oy-kun soat:daqiqa)\n\n"
+            "Yoki /cancel ni bosing."
         )
     
     # Test tahrirlash
