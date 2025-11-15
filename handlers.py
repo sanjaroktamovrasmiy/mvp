@@ -507,25 +507,57 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             return
         
         try:
-            # Javoblarni ajratish - faqat a, b, c, d harflarini olamiz
+            # Javoblarni ajratish - 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilinadi
             answers = []
             for char in answers_text:
-                if char.lower() in 'abcd':
-                    answers.append(char.lower())
+                char_lower = char.lower()
+                # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
+                question_idx = len(answers)
+                
+                # 33, 34, 35-savollar (idx 32, 33, 34) uchun a-f qabul qilamiz
+                if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
+                    if char_lower in 'abcdef':
+                        answers.append(char_lower)
+                else:
+                    # Boshqa savollar uchun faqat a-d qabul qilamiz
+                    if char_lower in 'abcd':
+                        answers.append(char_lower)
+                
+                # Agar 43 ta javob to'plansa, tsiklni to'xtatamiz
+                if len(answers) >= 43:
+                    break
             
             if not answers:
                 await update.message.reply_text(
                     "❌ Javoblar topilmadi!\n\n"
-                    "Javoblarni kiriting: 1a2b3c4d... yoki abc... formatida"
+                    "Javoblarni kiriting: 1a2b3c4d... yoki abc... formatida\n"
+                    "⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+                )
+                return
+            
+            # Javoblar sonini tekshirish (43 ta majburiy)
+            REQUIRED_ANSWERS = 43
+            if len(answers) != REQUIRED_ANSWERS:
+                await update.message.reply_text(
+                    f"❌ Javoblar soni noto'g'ri!\n\n"
+                    f"⚠️ Javoblar soni aniq {REQUIRED_ANSWERS} ta bo'lishi kerak.\n"
+                    f"🔢 Hozirgi son: {len(answers)} ta\n\n"
+                    f"Javoblarni qayta kiriting:"
                 )
                 return
             
             # Savollarni yaratish (javoblar soniga qarab)
             questions = []
             for idx, answer in enumerate(answers):
+                # 33, 34, 35-savollar uchun 6 ta variant, boshqalar uchun 4 ta
+                if idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
+                    options = ['a', 'b', 'c', 'd', 'e', 'f']
+                else:
+                    options = ['a', 'b', 'c', 'd']
+                
                 questions.append({
                     'question': f"Savol {idx + 1}",
-                    'options': ['a', 'b', 'c', 'd'],  # Standart variantlar
+                    'options': options,
                     'correct': answer
                 })
             
@@ -796,8 +828,14 @@ async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['test_file_name'] = file_name
         context.user_data['test_creation_step'] = 'answers'
         
-        # Javoblar kiritishni so'rash
-        await update.message.reply_text("Javoblarni kiriting: 1a2b3c4d...")
+        # Javoblar kiritishni so'rash (43 ta majburiy)
+        await update.message.reply_text(
+            "✅ Fayl yuklandi!\n\n"
+            "📝 Javoblarni kiriting (43 ta majburiy):\n\n"
+            "Format: 1a2b3c4d... yoki abc...\n\n"
+            "⚠️ Javoblar soni aniq 43 ta bo'lishi kerak!\n"
+            "ℹ️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+        )
         
     except Exception as e:
         logger.error(f"Fayl qayta ishlash xatosi: {e}")
@@ -1048,17 +1086,33 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
     test = data['tests'][test_id]
     
     # Javoblarni ajratish (1a2b3c4d... yoki abc...)
+    # 33, 34, 35-savollar uchun e va f ham qabul qilinadi
     answers = []
     for char in text:
-        if char.lower() in 'abcd':
-            answers.append(char.lower())
+        char_lower = char.lower()
+        # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
+        question_idx = len(answers)
+        
+        # 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilamiz
+        if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
+            if char_lower in 'abcdef':
+                answers.append(char_lower)
+        else:
+            # Boshqa savollar uchun faqat a-d qabul qilamiz
+            if char_lower in 'abcd':
+                answers.append(char_lower)
+        
+        # Agar yetarli javob to'plansa, tsiklni to'xtatamiz
+        if len(answers) >= len(test['questions']):
+            break
     
     if len(answers) != len(test['questions']):
         await update.message.reply_text(
             f"❌ Javoblar soni noto'g'ri!\n"
             f"Savollar soni: {len(test['questions'])}\n"
             f"Javoblar soni: {len(answers)}\n\n"
-            f"Qayta kiriting: 1a2b3c4d... formatida"
+            f"Qayta kiriting: 1a2b3c4d... formatida\n"
+            f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
         )
         return True  # Javob qayta ishlandi, lekin xatolik bor
     
