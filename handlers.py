@@ -615,7 +615,6 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
         
         try:
             # Yozma javoblarni qatorlarga ajratish va qavs ichidagi matnlarni birlashtirish
-            import re
             lines = text_answers_input.split('\n')
             text_answers = []
             
