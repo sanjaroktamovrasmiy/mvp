@@ -6,6 +6,7 @@ Bot handler funksiyalari
 """
 
 import logging
+import re
 import os
 from datetime import datetime, timedelta
 import pytz
@@ -604,67 +605,83 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("📄 Test faylini yuboring:")
         return
     
-    elif step == 'answers':
-        # Javoblar kiritildi (1a2b3c4d...)
-        answers_text = update.message.text.strip().lower()
-        if answers_text == '/cancel':
+    elif step == 'text_answers':
+        # 36-40 savollar uchun yozma javoblar kiritildi
+        text_answers_input = update.message.text.strip()
+        if text_answers_input == '/cancel':
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
         
         try:
-            # Javoblarni ajratish - 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilinadi
-            answers = []
-            for char in answers_text:
-                char_lower = char.lower()
-                # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
-                question_idx = len(answers)
-                
-                # 33, 34, 35-savollar (idx 32, 33, 34) uchun a-f qabul qilamiz
-                if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
-                    if char_lower in 'abcdef':
-                        answers.append(char_lower)
-                else:
-                    # Boshqa savollar uchun faqat a-d qabul qilamiz
-                    if char_lower in 'abcd':
-                        answers.append(char_lower)
-                
-                # Agar 43 ta javob to'plansa, tsiklni to'xtatamiz
-                if len(answers) >= 43:
-                    break
+            # Yozma javoblarni qatorlarga ajratish va qavs ichidagi matnlarni birlashtirish
+            import re
+            lines = text_answers_input.split('\n')
+            text_answers = []
             
-            if not answers:
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Qavs ichidagi matnni topish va olib tashlash (alohida javob deb hisoblanmasligi uchun)
+                # Qavs ichidagi matn javobning bir qismi bo'lib qoladi
+                # Masalan: "Javob (qavs ichidagi)" -> "Javob (qavs ichidagi)" butun javob bo'ladi
+                # Lekin qavs ichidagi matn alohida qator deb hisoblanmaydi
+                
+                # Agar qator qavs bilan boshlansa va tugasa, uni bitta javob deb hisoblaymiz
+                # Lekin qavs ichidagi matn alohida javob emas, faqat tushuntirish
+                text_answers.append(line)
+            
+            # 36-40 savollar uchun 5 ta javob kerak
+            if len(text_answers) != 5:
                 await update.message.reply_text(
-                    "❌ Javoblar topilmadi!\n\n"
-                    "Javoblarni kiriting: 1a2b3c4d... yoki abc... formatida\n"
-                    "⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+                    f"❌ Yozma javoblar soni noto'g'ri!\n\n"
+                    f"36-40 savollar uchun 5 ta javob kerak.\n"
+                    f"Hozirgi son: {len(text_answers)} ta\n\n"
+                    f"Har bir savol uchun alohida qatorda javob yozing.\n"
+                    f"Qavs ichida tushuntirish yozishingiz mumkin:\n"
+                    f"Masalan:\n"
+                    f"Javob 36-savolga (tushuntirish)\n"
+                    f"Javob 37-savolga\n"
+                    f"Javob 38-savolga (qavs ichidagi matn)\n"
+                    f"Javob 39-savolga\n"
+                    f"Javob 40-savolga"
                 )
                 return
             
-            # Javoblar sonini tekshirish (43 ta majburiy)
-            REQUIRED_ANSWERS = 43
-            if len(answers) != REQUIRED_ANSWERS:
-                await update.message.reply_text(
-                    f"❌ Javoblar soni noto'g'ri!\n\n"
-                    f"⚠️ Javoblar soni aniq {REQUIRED_ANSWERS} ta bo'lishi kerak.\n"
-                    f"🔢 Hozirgi son: {len(answers)} ta\n\n"
-                    f"Javoblarni qayta kiriting:"
-                )
-                return
+            # Yozma javoblarni saqlash
+            context.user_data['text_answers'] = text_answers
             
-            # Savollarni yaratish (javoblar soniga qarab)
+            # Savollarni yaratish
             questions = []
-            for idx, answer in enumerate(answers):
+            # Avval 1-35 savollar uchun ko'p tanlov savollarini yaratish
+            mc_answers = context.user_data.get('mc_answers', [])
+            for idx, answer in enumerate(mc_answers):
                 # 33, 34, 35-savollar uchun 6 ta variant, boshqalar uchun 4 ta
                 if idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
                     options = ['a', 'b', 'c', 'd', 'e', 'f']
+                    questions.append({
+                        'question': f"Savol {idx + 1}",
+                        'options': options,
+                        'correct': answer
+                    })
                 else:
                     options = ['a', 'b', 'c', 'd']
-                
+                    questions.append({
+                        'question': f"Savol {idx + 1}",
+                        'options': options,
+                        'correct': answer
+                    })
+            
+            # 36-40 savollar uchun yozma javob savollarini yaratish
+            for idx, answer in enumerate(text_answers):
+                question_idx = 35 + idx  # 36, 37, 38, 39, 40-savollar (0-based: 35, 36, 37, 38, 39)
                 questions.append({
-                    'question': f"Savol {idx + 1}",
-                    'options': options,
-                    'correct': answer
+                    'question': f"Savol {question_idx + 1}",
+                    'type': 'text_answer',  # Yozma javob turi
+                    'options': [],  # Variantlar yo'q
+                    'correct': answer  # To'g'ri javob (qo'lda tekshirish uchun)
                 })
             
             # Javoblarni saqlash va vaqt belgilash bosqichiga o'tish
@@ -688,7 +705,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-                f"✅ Javoblar saqlandi!\n\n"
+                f"✅ Barcha javoblar saqlandi!\n\n"
                 f"📅 Test boshlanish vaqtini belgilang:\n\n"
                 f"🕐 Hozirgi vaqt: {current_time}\n\n"
                 f"Quyidagi variantlardan birini tanlang:",
@@ -697,9 +714,196 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             return
         
         except Exception as e:
-            logger.error(f"Javoblar qayta ishlash xatosi: {e}")
+            logger.error(f"Yozma javoblar qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
     
+    elif step == 'answers':
+        # Javoblar kiritildi (1a2b3c4d... yoki 1a2b3b4b5b6a...36(36savoluchun yozmajavob)(37savoluchunyozma javob)...)
+        answers_text = update.message.text.strip()
+        if answers_text.lower() == '/cancel':
+            context.user_data.clear()
+            await update.message.reply_text("❌ Test yaratish bekor qilindi.")
+            return
+        
+        try:
+            # Parser: barcha javoblarni bir qatorda qabul qilish
+            mc_answers = {}  # {question_num: answer}
+            text_answers = {}  # {question_num: answer}
+            
+            # 1. Raqam + harf kombinatsiyalarini topish (1a, 2b, 10c, ...)
+            pattern = r'(\d+)([a-fA-F])'
+            matches = re.findall(pattern, answers_text)
+            for num_str, letter in matches:
+                q_num = int(num_str)
+                if q_num <= 35:
+                    mc_answers[q_num] = letter.lower()
+                elif q_num > 40:
+                    # 41+ savollar uchun ham variant javoblar bo'lishi mumkin
+                    mc_answers[q_num] = letter.lower()
+            
+            # 2. Qavs ichidagi matnlarni topish - ketma-ketlikda
+            # Format: raqam(qavs ichidagi matn) yoki (qavs ichidagi matn)
+            paren_positions = []
+            for match in re.finditer(r'(\d+)?\(([^)]+)\)', answers_text):
+                num_str = match.group(1)
+                content = match.group(2)
+                paren_positions.append((match.start(), num_str, content))
+            
+            # Qavslarni ketma-ketlikda qayta ishlash
+            next_text_q = 36  # Keyingi yozma javob savol raqami
+            for pos, num_str, content in paren_positions:
+                # Faqat raqamlar bo'lgan qavslarni e'tiborsiz qoldirish
+                if content.strip().isdigit():
+                    continue
+                
+                # Agar qavs oldida raqam bo'lsa, o'sha raqam savol raqami
+                if num_str:
+                    q_num = int(num_str)
+                    if 36 <= q_num <= 40:
+                        text_answers[q_num] = content.strip()
+                        if q_num >= next_text_q:
+                            next_text_q = q_num + 1
+                else:
+                    # Agar qavs oldida raqam bo'lmasa, qavs ichidagi matnda savol raqamini qidirish
+                    # Masalan: "36savoluchun yozmajavob" -> 36
+                    content_num_match = re.search(r'^(\d+)', content.strip())
+                    if content_num_match:
+                        q_num = int(content_num_match.group(1))
+                        if 36 <= q_num <= 40:
+                            text_answers[q_num] = content.strip()
+                            if q_num >= next_text_q:
+                                next_text_q = q_num + 1
+                    else:
+                        # Agar qavs ichida ham raqam bo'lmasa, ketma-ketlikda 36, 37, 38, 39, 40 deb hisoblaymiz
+                        if next_text_q <= 40:
+                            text_answers[next_text_q] = content.strip()
+                            next_text_q += 1
+            
+            # 1-35 savollar uchun javoblarni tekshirish
+            REQUIRED_MC_ANSWERS = 35
+            if len(mc_answers) < REQUIRED_MC_ANSWERS:
+                # Eski formatni qo'llab-quvvatlash: faqat harflar (abc...)
+                # Agar raqam+harf formatida yetarli javob bo'lmasa, eski formatni sinab ko'ramiz
+                if len(mc_answers) == 0:
+                    # Eski format: faqat harflar
+                    answers_text_lower = answers_text.lower()
+                    answers = []
+                    for char in answers_text_lower:
+                        char_lower = char.lower()
+                        question_idx = len(answers)
+                        if question_idx >= 35:
+                            break
+                        if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
+                            if char_lower in 'abcdef':
+                                answers.append(char_lower)
+                        else:
+                            if char_lower in 'abcd':
+                                answers.append(char_lower)
+                    
+                    if len(answers) == REQUIRED_MC_ANSWERS:
+                        # Eski format ishladi
+                        mc_answers = {i+1: answers[i] for i in range(len(answers))}
+                    else:
+                        await update.message.reply_text(
+                            f"❌ Javoblar soni noto'g'ri!\n\n"
+                            f"⚠️ 1-35 savollar uchun {REQUIRED_MC_ANSWERS} ta javob kerak.\n"
+                            f"🔢 Hozirgi son: {len(answers)} ta\n\n"
+                            f"Format: 1a2b3c4d... yoki abc... (35 ta javob)\n"
+                            f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+                        )
+                        return
+                else:
+                    await update.message.reply_text(
+                        f"❌ Javoblar soni noto'g'ri!\n\n"
+                        f"⚠️ 1-35 savollar uchun {REQUIRED_MC_ANSWERS} ta javob kerak.\n"
+                        f"🔢 Hozirgi son: {len(mc_answers)} ta\n\n"
+                        f"Format: 1a2b3c4d... yoki abc... (35 ta javob)\n"
+                        f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+                    )
+                    return
+            
+            # 1-35 savollar uchun javoblarni listga o'tkazish (tartibda)
+            mc_answers_list = []
+            for q_num in range(1, 36):
+                if q_num in mc_answers:
+                    mc_answers_list.append(mc_answers[q_num])
+                else:
+                    await update.message.reply_text(
+                        f"❌ {q_num}-savol uchun javob topilmadi!\n\n"
+                        f"Barcha 1-35 savollar uchun javoblar kerak.\n"
+                        f"Format: 1a2b3c4d... yoki abc... (35 ta javob)"
+                    )
+                    return
+            
+            # 36-40 savollar uchun yozma javoblarni tekshirish
+            if len(text_answers) < 5:
+                # Agar yozma javoblar yetarli bo'lmasa, alohida so'rash
+                context.user_data['test_creation_step'] = 'text_answers'
+                context.user_data['mc_answers'] = mc_answers_list
+                
+                missing = [q for q in range(36, 41) if q not in text_answers]
+                if missing:
+                    await update.message.reply_text(
+                        f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                        f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                        f"⚠️ Quyidagi savollar uchun javoblar kerak: {', '.join(map(str, missing))}\n\n"
+                        f"Har bir savol uchun alohida qatorda javob yozing yoki qavs ichida kiriting:\n"
+                        f"Masalan:\n"
+                        f"36savol javobi\n"
+                        f"37savol javobi\n"
+                        f"..."
+                    )
+                    return
+            else:
+                # Barcha javoblar mavjud
+                text_answers_list = []
+                for q_num in range(36, 41):
+                    if q_num in text_answers:
+                        text_answers_list.append(text_answers[q_num])
+                    else:
+                        # Agar biror savol uchun javob bo'lmasa, alohida so'rash
+                        context.user_data['test_creation_step'] = 'text_answers'
+                        context.user_data['mc_answers'] = mc_answers_list
+                        await update.message.reply_text(
+                            f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                            f"📝 {q_num}-savol uchun javob topilmadi.\n"
+                            f"36-40 savollar uchun yozma javoblarni kiriting:"
+                        )
+                        return
+                
+                # Barcha javoblar mavjud, keyingi bosqichga o'tish
+                context.user_data['mc_answers'] = mc_answers_list
+                context.user_data['text_answers'] = text_answers_list
+                context.user_data['test_creation_step'] = 'start_time'
+                
+                # Hozirgi vaqtni ko'rsatish (O'zbekiston vaqti)
+                now_uz = datetime.now(UZBEKISTAN_TZ)
+                current_time = now_uz.strftime('%d.%m.%Y %H:%M')
+                
+                # Inline keyboard yaratish - tez variantlar
+                keyboard = [
+                    [InlineKeyboardButton("⚡ Hozir", callback_data="time_now")],
+                    [
+                        InlineKeyboardButton("15 min", callback_data="time_15m"),
+                        InlineKeyboardButton("30 min", callback_data="time_30m"),
+                        InlineKeyboardButton("1 soat", callback_data="time_1h")
+                    ],
+                    [InlineKeyboardButton("📝 Boshqa vaqt kiritish", callback_data="time_custom")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    f"✅ Barcha javoblar saqlandi!\n\n"
+                    f"📅 Test boshlanish vaqtini belgilang:\n\n"
+                    f"🕐 Hozirgi vaqt: {current_time}\n\n"
+                    f"Quyidagi variantlardan birini tanlang:",
+                    reply_markup=reply_markup
+                )
+                return
+        
+        except Exception as e:
+            logger.error(f"Javoblar qayta ishlash xatosi: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)}")
     elif step == 'start_time':
         # Test boshlanish vaqti kiritildi (faqat custom vaqt kiritganda)
         time_input = update.message.text.strip().lower()
@@ -895,13 +1099,14 @@ async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['test_file_name'] = file_name
         context.user_data['test_creation_step'] = 'answers'
         
-        # Javoblar kiritishni so'rash (43 ta majburiy)
+        # Javoblar kiritishni so'rash (1-35 savollar uchun ko'p tanlov, 36-40 uchun yozma javob)
         await update.message.reply_text(
             "✅ Fayl yuklandi!\n\n"
-            "📝 Javoblarni kiriting (43 ta majburiy):\n\n"
-            "Format: 1a2b3c4d... yoki abc...\n\n"
-            "⚠️ Javoblar soni aniq 43 ta bo'lishi kerak!\n"
-            "ℹ️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+            "📝 Avval 1-35 savollar uchun javoblarni kiriting:\n\n"
+            "Format: 1a2b3c4d... yoki abc... (35 ta javob)\n\n"
+            "⚠️ Javoblar soni aniq 35 ta bo'lishi kerak!\n"
+            "ℹ️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!\n\n"
+            "📝 Keyin 36-40 savollar uchun yozma javoblar so'raladi."
         )
         
     except Exception as e:
@@ -1078,7 +1283,18 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                         document=f,
                         filename=file_name
                     )
-                await update.callback_query.message.reply_text("✅ Test fayli yuborildi!\n\nJavoblarni kiriting: 1a2b3c4d...")
+                # 36-40 savollar mavjudligini tekshirish
+                has_text_questions = any(
+                    q.get('type') == 'text_answer' 
+                    for q in test['questions']
+                )
+                instruction_text = "✅ Test fayli yuborildi!\n\n"
+                if has_text_questions:
+                    instruction_text += "📝 1-35 savollar uchun javoblarni kiriting: 1a2b3c4d...\n"
+                    instruction_text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
+                else:
+                    instruction_text += "Javoblarni kiriting: 1a2b3c4d..."
+                await update.callback_query.message.reply_text(instruction_text)
             else:
                 await update.message.reply_text(f"📝 {test['name']}")
                 with open(test['file_path'], 'rb') as f:
@@ -1086,18 +1302,38 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                         document=f,
                         filename=file_name
                     )
-                await update.message.reply_text("✅ Test fayli yuborildi!\n\nJavoblarni kiriting: 1a2b3c4d...")
+                # 36-40 savollar mavjudligini tekshirish
+                has_text_questions = any(
+                    q.get('type') == 'text_answer' 
+                    for q in test['questions']
+                )
+                instruction_text = "✅ Test fayli yuborildi!\n\n"
+                if has_text_questions:
+                    instruction_text += "📝 1-35 savollar uchun javoblarni kiriting: 1a2b3c4d...\n"
+                    instruction_text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
+                else:
+                    instruction_text += "Javoblarni kiriting: 1a2b3c4d..."
+                await update.message.reply_text(instruction_text)
         except Exception as e:
             logger.error(f"Fayl yuborish xatosi: {e}")
             # Agar fayl yuborib bo'lmasa, oddiy matn ko'rsatish
             text = f"📝 {test['name']}\n\n"
+            has_text_questions = False
             for idx, question in enumerate(test['questions'], 1):
                 text += f"{idx}. {question['question']}\n"
-                for opt_idx, option in enumerate(question['options']):
-                    letter = chr(97 + opt_idx)  # a, b, c, d
-                    text += f"   {letter}) {option}\n"
+                if question.get('type') == 'text_answer':
+                    text += "   (Yozma javob)\n"
+                    has_text_questions = True
+                else:
+                    for opt_idx, option in enumerate(question['options']):
+                        letter = chr(97 + opt_idx)  # a, b, c, d
+                        text += f"   {letter}) {option}\n"
                 text += "\n"
-            text += "Javoblarni kiriting: 1a2b3c4d..."
+            if has_text_questions:
+                text += "📝 1-35 savollar uchun javoblarni kiriting: 1a2b3c4d...\n"
+                text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
+            else:
+                text += "Javoblarni kiriting: 1a2b3c4d..."
             
             if update.callback_query:
                 await update.callback_query.edit_message_text(text)
@@ -1106,14 +1342,23 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
     else:
         # Agar fayl mavjud bo'lmasa, oddiy matn ko'rsatish
         text = f"📝 {test['name']}\n\n"
+        has_text_questions = False
         for idx, question in enumerate(test['questions'], 1):
             text += f"{idx}. {question['question']}\n"
-            for opt_idx, option in enumerate(question['options']):
-                letter = chr(97 + opt_idx)  # a, b, c, d
-                text += f"   {letter}) {option}\n"
+            if question.get('type') == 'text_answer':
+                text += "   (Yozma javob)\n"
+                has_text_questions = True
+            else:
+                for opt_idx, option in enumerate(question['options']):
+                    letter = chr(97 + opt_idx)  # a, b, c, d
+                    text += f"   {letter}) {option}\n"
             text += "\n"
         
-        text += "Javoblarni kiriting: 1a2b3c4d..."
+        if has_text_questions:
+            text += "📝 1-35 savollar uchun javoblarni kiriting: 1a2b3c4d...\n"
+            text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
+        else:
+            text += "Javoblarni kiriting: 1a2b3c4d..."
         
         if update.callback_query:
             await update.callback_query.edit_message_text(text)
@@ -1122,7 +1367,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
 
 
 async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test javoblarini qayta ishlash (1a2b3c4d... formatida)"""
+    """Test javoblarini qayta ishlash (1a2b3c4d... formatida va yozma javoblar)"""
     if not update.message or not update.message.text:
         return False
     
@@ -1142,7 +1387,7 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
         return False  # Test ishlash rejimida emas
     
     user_id = update.effective_user.id
-    text = update.message.text.strip().lower()
+    text = update.message.text.strip()
     
     data = load_data()
     if test_id not in data['tests']:
@@ -1151,45 +1396,121 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
     
     test = data['tests'][test_id]
     
-    # Javoblarni ajratish (1a2b3c4d... yoki abc...)
-    # 33, 34, 35-savollar uchun e va f ham qabul qilinadi
-    answers = []
-    for char in text:
-        char_lower = char.lower()
-        # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
-        question_idx = len(answers)
-        
-        # 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilamiz
-        if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
-            if char_lower in 'abcdef':
-                answers.append(char_lower)
-        else:
-            # Boshqa savollar uchun faqat a-d qabul qilamiz
-            if char_lower in 'abcd':
-                answers.append(char_lower)
-        
-        # Agar yetarli javob to'plansa, tsiklni to'xtatamiz
-        if len(answers) >= len(test['questions']):
-            break
+    # Yozma javoblar kiritilayotganini tekshirish (36-40 savollar uchun)
+    waiting_text_answers = context.user_data[test_data_key].get('waiting_text_answers', False)
     
-    if len(answers) != len(test['questions']):
-        await update.message.reply_text(
-            f"❌ Javoblar soni noto'g'ri!\n"
-            f"Savollar soni: {len(test['questions'])}\n"
-            f"Javoblar soni: {len(answers)}\n\n"
-            f"Qayta kiriting: 1a2b3c4d... formatida\n"
-            f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+    if waiting_text_answers:
+        # Yozma javoblar kiritilmoqda (36-40 savollar)
+        # Javoblarni qatorlarga ajratish (har bir qator bitta savol uchun)
+        # Qavs ichidagi matn alohida javob deb hisoblanmaydi
+        lines = text.split('\n')
+        text_answers = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            # Qavs ichidagi matn javobning bir qismi bo'lib qoladi, alohida javob emas
+            text_answers.append(line)
+        
+        # 36-40 savollar uchun 5 ta javob kerak
+        text_question_indices = [35, 36, 37, 38, 39]  # 0-based index
+        
+        if len(text_answers) != len(text_question_indices):
+            await update.message.reply_text(
+                f"❌ Yozma javoblar soni noto'g'ri!\n\n"
+                f"36-40 savollar uchun {len(text_question_indices)} ta javob kerak.\n"
+                f"Hozirgi son: {len(text_answers)} ta\n\n"
+                f"Har bir savol uchun alohida qatorda javob yozing.\n"
+                f"Qavs ichida tushuntirish yozishingiz mumkin:\n"
+                f"Masalan:\n"
+                f"Javob 36-savolga (tushuntirish)\n"
+                f"Javob 37-savolga\n"
+                f"Javob 38-savolga (qavs ichidagi matn)\n"
+                f"Javob 39-savolga\n"
+                f"Javob 40-savolga"
+            )
+            return True
+        
+        # Yozma javoblarni saqlash
+        for idx, answer in enumerate(text_answers):
+            question_idx = text_question_indices[idx]
+            context.user_data[test_data_key]['answers'][str(question_idx)] = answer
+        
+        # Testni yakunlash
+        context.user_data[test_data_key]['waiting_answers'] = False
+        context.user_data[test_data_key]['waiting_text_answers'] = False
+        await finish_test(update, context, test_id)
+        return True
+    
+    else:
+        # Ko'p tanlov javoblari kiritilmoqda (1-35 savollar)
+        text_lower = text.lower()
+        
+        # 36-40 savollar mavjudligini tekshirish
+        has_text_questions = any(
+            q.get('type') == 'text_answer' 
+            for q in test['questions']
         )
-        return True  # Javob qayta ishlandi, lekin xatolik bor
-    
-    # Javoblarni saqlash
-    for idx, answer in enumerate(answers):
-        context.user_data[test_data_key]['answers'][str(idx)] = answer
-    
-    # Testni yakunlash
-    context.user_data[test_data_key]['waiting_answers'] = False
-    await finish_test(update, context, test_id)
-    return True
+        
+        # Javoblarni ajratish (1a2b3c4d... yoki abc...)
+        # Faqat 1-35 savollar uchun (0-based: 0-34)
+        answers = []
+        for char in text_lower:
+            char_lower = char.lower()
+            # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
+            question_idx = len(answers)
+            
+            # Faqat 1-35 savollar uchun javob qabul qilamiz (0-based: 0-34)
+            if question_idx >= 35:
+                break
+            
+            # 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilamiz
+            if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
+                if char_lower in 'abcdef':
+                    answers.append(char_lower)
+            else:
+                # Boshqa savollar uchun faqat a-d qabul qilamiz
+                if char_lower in 'abcd':
+                    answers.append(char_lower)
+        
+        # 1-35 savollar uchun 35 ta javob kerak
+        required_mc_answers = 35
+        if len(answers) != required_mc_answers:
+            await update.message.reply_text(
+                f"❌ Javoblar soni noto'g'ri!\n"
+                f"1-35 savollar uchun {required_mc_answers} ta javob kerak.\n"
+                f"Hozirgi son: {len(answers)} ta\n\n"
+                f"Qayta kiriting: 1a2b3c4d... formatida\n"
+                f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+            )
+            return True
+        
+        # Ko'p tanlov javoblarini saqlash
+        for idx, answer in enumerate(answers):
+            context.user_data[test_data_key]['answers'][str(idx)] = answer
+        
+        # Agar 36-40 savollar mavjud bo'lsa, yozma javoblarni so'rash
+        if has_text_questions:
+            context.user_data[test_data_key]['waiting_text_answers'] = True
+            await update.message.reply_text(
+                "✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                "📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                "Har bir savol uchun alohida qatorda javob yozing.\n"
+                "Qavs ichida tushuntirish yozishingiz mumkin (qavs ichidagi matn alohida javob deb hisoblanmaydi).\n\n"
+                "Masalan:\n"
+                "Javob 36-savolga (tushuntirish)\n"
+                "Javob 37-savolga\n"
+                "Javob 38-savolga (qavs ichidagi matn)\n"
+                "Javob 39-savolga\n"
+                "Javob 40-savolga"
+            )
+            return True
+        else:
+            # 36-40 savollar yo'q bo'lsa, testni yakunlash
+            context.user_data[test_data_key]['waiting_answers'] = False
+            await finish_test(update, context, test_id)
+            return True
 
 
 async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id: str):
@@ -1210,15 +1531,29 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
     
     for idx, question in enumerate(test['questions']):
         user_answer = user_answers.get(str(idx), '')
-        is_correct = user_answer == question['correct']
-        if is_correct:
-            correct += 1
-        results.append({
-            'question': question['question'],
-            'user_answer': user_answer,
-            'correct_answer': question['correct'],
-            'is_correct': is_correct
-        })
+        
+        # Yozma javoblar uchun avtomatik baholash qilinmaydi (qo'lda tekshirish kerak)
+        if question.get('type') == 'text_answer':
+            # Yozma javoblar uchun is_correct None yoki False bo'ladi (qo'lda tekshirish uchun)
+            is_correct = None  # Qo'lda tekshirish kerak
+            results.append({
+                'question': question['question'],
+                'user_answer': user_answer,
+                'correct_answer': question.get('correct', ''),
+                'is_correct': is_correct,
+                'type': 'text_answer'  # Yozma javob ekanligini belgilash
+            })
+        else:
+            # Ko'p tanlov javoblari uchun avtomatik tekshirish
+            is_correct = user_answer == question['correct']
+            if is_correct:
+                correct += 1
+            results.append({
+                'question': question['question'],
+                'user_answer': user_answer,
+                'correct_answer': question['correct'],
+                'is_correct': is_correct
+            })
     
     # Rasch model orqali hisoblash (natijalash uchun saqlash)
     score = calculate_rasch_score(results, test['questions'])
