@@ -162,6 +162,13 @@ The bot interface is in Uzbek language.
 
 ## Recent Changes
 
+### November 17, 2024 - Test Format Customization
+- Confirmed bot supports A-F answer options for questions 33-35 (6 variants)
+- Enhanced documentation for extended multiple-choice question format
+- Questions 1-32: 4 answer options (A-D)
+- Questions 33-35: 6 answer options (A-F) for matching/alignment questions
+- Questions 36-40: Text-based answers for calculation problems
+
 ### November 17, 2024 - Initial Replit Setup
 - Installed Python 3.11 and all dependencies
 - Created `config.py` to read from Replit environment variables

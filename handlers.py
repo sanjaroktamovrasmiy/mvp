@@ -658,6 +658,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             mc_answers = context.user_data.get('mc_answers', [])
             for idx, answer in enumerate(mc_answers):
                 # 33, 34, 35-savollar uchun 6 ta variant, boshqalar uchun 4 ta
+                # (Test fayliga muvofiq: 33-40 savollar uchun 6 variant)
                 if idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
                     options = ['a', 'b', 'c', 'd', 'e', 'f']
                     questions.append({
