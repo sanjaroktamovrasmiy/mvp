@@ -17,7 +17,7 @@ import pdfkit
 
 from config import BOSS_ID
 from database import load_data, save_data
-from utils import check_subscription, calculate_rasch_score, generate_pdf, evaluate_students_from_matrix
+from utils import check_subscription, generate_pdf
 
 # O'zbekiston vaqti (UTC+5)
 UZBEKISTAN_TZ = pytz.timezone('Asia/Tashkent')
@@ -1348,9 +1348,6 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
                 'is_correct': is_correct
             })
     
-    # Rasch model orqali hisoblash (natijalash uchun saqlash)
-    score = calculate_rasch_score(results, test['questions'])
-    
     # Natijalarni saqlash (lekin hozir ko'rsatmaymiz)
     result_id = f"result_{user_id}_{test_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     if 'user_results' not in data:
@@ -1362,7 +1359,6 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
         'correct': correct,
         'total': total,
         'percentage': (correct / total * 100) if total > 0 else 0,
-        'rasch_score': score,
         'results': results,
         'completed_at': datetime.now().isoformat()
     }
@@ -1423,7 +1419,7 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
     # Natijalarni tayyorlash
     teacher_id = test.get('created_by')
     
-    # Barcha natijalarni Rasch modelida hisoblash va tartiblash
+    # Barcha natijalarni to'plash va tartiblash
     finalized_results = []
     for result in all_results:
         finalized_results.append({
@@ -1431,29 +1427,26 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
             'correct': result['correct'],
             'total': result['total'],
             'percentage': result['percentage'],
-            'rasch_score': result.get('rasch_score', 0.0),
             'completed_at': result['completed_at']
         })
     
-    # Rasch score bo'yicha tartiblash (yuqoridan pastga)
-    finalized_results.sort(key=lambda x: x.get('rasch_score', 0), reverse=True)
+    # Foiz bo'yicha tartiblash (yuqoridan pastga)
+    finalized_results.sort(key=lambda x: x.get('percentage', 0), reverse=True)
     
     # Umumiy statistika
     total_students = len(finalized_results)
     avg_percentage = sum(r['percentage'] for r in finalized_results) / total_students if total_students > 0 else 0
-    avg_rasch = sum(r['rasch_score'] for r in finalized_results) / total_students if total_students > 0 else 0
     
     # O'qituvchiga natijalar xabari
     text = f"📊 Test natijalari: {test['name']}\n\n"
     text += f"📈 Umumiy statistika:\n"
     text += f"   Jami ishtirokchilar: {total_students}\n"
-    text += f"   O'rtacha foiz: {avg_percentage:.1f}%\n"
-    text += f"   O'rtacha Rasch score: {avg_rasch:.2f}\n\n"
-    text += f"📋 Natijalar (Rasch score bo'yicha):\n\n"
+    text += f"   O'rtacha foiz: {avg_percentage:.1f}%\n\n"
+    text += f"📋 Natijalar (foiz bo'yicha):\n\n"
     
     for idx, result in enumerate(finalized_results[:20], 1):  # Top 20
         text += f"{idx}. Talabgor: {result['user_id']}\n"
-        text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%) | Rasch: {result['rasch_score']:.2f}\n\n"
+        text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%)\n\n"
     
     if total_students > 20:
         text += f"... va yana {total_students - 20} ta natija\n"
@@ -1482,17 +1475,15 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                 <p><strong>Test ID:</strong> {test_id}</p>
                 <p><strong>Jami ishtirokchilar:</strong> {total_students}</p>
                 <p><strong>O'rtacha foiz:</strong> {avg_percentage:.1f}%</p>
-                <p><strong>O'rtacha Rasch Score:</strong> {avg_rasch:.2f}</p>
                 <p><strong>Natijalash vaqti:</strong> {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}</p>
             </div>
-            <h2>Barcha natijalar (Rasch score bo'yicha tartiblangan):</h2>
+            <h2>Barcha natijalar (foiz bo'yicha tartiblangan):</h2>
             <table>
                 <tr>
                     <th>#</th>
                     <th>Talabgor</th>
                     <th>To'g'ri javoblar</th>
                     <th>Foiz</th>
-                    <th>Rasch Score</th>
                     <th>Vaqt</th>
                 </tr>
         """
@@ -1505,7 +1496,6 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                     <td>{result['user_id']}</td>
                     <td>{result['correct']}/{result['total']}</td>
                     <td>{result['percentage']:.1f}%</td>
-                    <td>{result['rasch_score']:.2f}</td>
                     <td>{completed_time}</td>
                 </tr>
             """
@@ -1522,16 +1512,15 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
             f"Test ID: {test_id}",
             f"Jami ishtirokchilar: {total_students}",
             f"O'rtacha foiz: {avg_percentage:.1f}%",
-            f"O'rtacha Rasch score: {avg_rasch:.2f}",
             f"Natijalash vaqti: {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}",
             "",
-            "Ishtirokchilar (Rasch score bo'yicha):"
+            "Ishtirokchilar (foiz bo'yicha):"
         ]
         for idx, result in enumerate(finalized_results, 1):
             fallback_lines.append(
                 f"{idx}. Talabgor: {result['user_id']} | "
                 f"{result['correct']}/{result['total']} | "
-                f"{result['percentage']:.1f}% | Rasch: {result.get('rasch_score', 0):.2f} | "
+                f"{result['percentage']:.1f}% | "
                 f"Vaqt: {datetime.fromisoformat(result['completed_at']).strftime('%Y-%m-%d %H:%M')}"
             )
         
@@ -1689,8 +1678,7 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📊 Mening natijalarim:\n\n"
     for result in sorted(user_results, key=lambda x: x['completed_at'], reverse=True)[:10]:
         text += f"📝 {result['test_name']}\n"
-        text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%)\n"
-        text += f"   Rasch: {result['rasch_score']:.2f}\n\n"
+        text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%)\n\n"
     
     await update.message.reply_text(text)
 
@@ -1917,405 +1905,3 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
         else:
             await update.message.reply_text(f"❌ Bu kanal topilmadi.")
         context.user_data['removing_channel'] = False
-
-
-async def rasch_evaluation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Rasch modeliga asoslanib talabalarni baholash"""
-    user_id = update.effective_user.id
-    data = load_data()
-    
-    # Faqat boss va adminlar foydalanishi mumkin
-    if user_id != BOSS_ID and user_id not in data.get("admins", []):
-        await update.message.reply_text("❌ Bu funksiya faqat adminlar uchun!")
-        return
-    
-    # Excel fayl kutilayotganini belgilash
-    context.user_data['waiting_for_rasch_matrix'] = True
-    
-    await update.message.reply_text(
-        "📊 Rasch modeliga asoslanib talabalarni baholash\n\n"
-        "Iltimos, .xlsx formatidagi matrix faylini yuboring.\n\n"
-        "Fayl formati:\n"
-        "- Birinchi qator: user_id, Q1, Q2, Q3, ...\n"
-        "- Keyingi qatorlar: har bir talaba uchun user_id va javoblar (0 yoki 1)\n\n"
-        "Masalan:\n"
-        "user_id | Q1 | Q2 | Q3\n"
-        "12345   | 1  | 0  | 1\n"
-        "67890   | 0  | 1  | 1"
-    )
-
-
-async def process_rasch_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Rasch matrix faylini qayta ishlash va standart ball (T-score) bilan baholash"""
-    if not context.user_data.get('waiting_for_rasch_matrix'):
-        return
-    
-    if not update.message or not update.message.document:
-        return
-    
-    document = update.message.document
-    file_name = document.file_name or "matrix.xlsx"
-    
-    # Faqat .xlsx fayllarni qabul qilish
-    if not file_name.lower().endswith('.xlsx'):
-        await update.message.reply_text(
-            "❌ Faqat .xlsx formatidagi fayllar qabul qilinadi!\n\n"
-            "Iltimos, Excel faylini (.xlsx) yuboring."
-        )
-        return
-    
-    try:
-        # Faylni yuklash
-        file = await context.bot.get_file(document.file_id)
-        
-        # Vaqtinchalik fayl sifatida saqlash
-        temp_dir = "temp_rasch"
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_file_path = os.path.join(temp_dir, f"rasch_matrix_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-        
-        await file.download_to_drive(temp_file_path)
-        
-        # Matrixni baholash
-        await update.message.reply_text("⏳ Matrix tahlil qilinmoqda... Rasch modeli ishga tushirilmoqda...")
-        
-        students_results, statistics = evaluate_students_from_matrix(temp_file_path)
-        
-        if not students_results or not statistics:
-            await update.message.reply_text(
-                "❌ Matrix tahlil qilib bo'lmadi!\n\n"
-                "Iltimos, fayl formati to'g'ri ekanligini tekshiring:\n"
-                "- Birinchi qator: user_id, Q1, Q2, Q3, ...\n"
-                "- Keyingi qatorlar: user_id va javoblar (0 yoki 1)\n\n"
-                "Misol:\n"
-                "user_id | Q1 | Q2 | Q3\n"
-                "12345   | 1  | 0  | 1\n"
-                "67890   | 0  | 1  | 1"
-            )
-            # Vaqtinchalik faylni o'chirish
-            try:
-                os.remove(temp_file_path)
-            except:
-                pass
-            context.user_data.pop('waiting_for_rasch_matrix', None)
-            return
-        
-        # Baholash mezonlari (rasmga asoslangan)
-        def get_grade_level(t_score):
-            """T-score bo'yicha baho darajasini aniqlash"""
-            if t_score >= 70:
-                return "A (A'lo)", "🟢"
-            elif t_score >= 60:
-                return "B (Yaxshi)", "🟡"
-            elif t_score >= 50:
-                return "C (Qoniqarli)", "🟠"
-            elif t_score >= 40:
-                return "D (Qoniqarsiz)", "🔴"
-            else:
-                return "E (Juda past)", "⚫"
-        
-        # Natijalarni ko'rsatish
-        text = "📊 Rasch Model Baholash Natijalari\n\n"
-        text += f"📐 Baholash formulasi: T = 50 + 10Z\n"
-        text += f"   Z = (θ - μ) / σ\n\n"
-        text += f"📈 Umumiy statistika:\n"
-        text += f"   Jami talabalar: {statistics['total_students']}\n"
-        text += f"   Jami savollar: {statistics['total_questions']}\n"
-        text += f"   O'rtacha foiz: {statistics['avg_percentage']:.1f}%\n"
-        text += f"   O'rtacha θ (theta): {statistics.get('avg_theta', 0):.2f}\n"
-        text += f"   Standart tafovut (σ): {statistics.get('std_theta', 0):.2f}\n"
-        text += f"   O'rtacha T-score: {statistics.get('avg_t_score', 50):.1f}\n\n"
-        text += f"📊 Baholash mezonlari:\n"
-        text += f"   🟢 A (A'lo): T ≥ 70\n"
-        text += f"   🟡 B (Yaxshi): 60 ≤ T < 70\n"
-        text += f"   🟠 C (Qoniqarli): 50 ≤ T < 60\n"
-        text += f"   🔴 D (Qoniqarsiz): 40 ≤ T < 50\n"
-        text += f"   ⚫ E (Juda past): T < 40\n\n"
-        text += f"📋 Top 15 talaba (T-score bo'yicha):\n\n"
-        
-        # Top 15 talaba
-        for idx, student in enumerate(students_results[:15], 1):
-            t_score = student.get('t_score', 50)
-            grade, emoji = get_grade_level(t_score)
-            text += f"{idx}. {emoji} Talabgor: {student['user_id']}\n"
-            text += f"   {student['correct']}/{student['total']} ({student['percentage']:.1f}%) | "
-            text += f"θ: {student.get('theta', 0):.2f} | T: {t_score:.2f} | {grade}\n\n"
-        
-        if statistics['total_students'] > 15:
-            text += f"... va yana {statistics['total_students'] - 15} ta talaba\n"
-        
-        # PDF yaratish - rasmda ko'rsatilgan formatga asoslangan
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Rasch Model - Test Natijalari</title>
-            <style>
-                body {{ 
-                    font-family: 'Times New Roman', serif; 
-                    padding: 30px; 
-                    line-height: 1.6;
-                }}
-                h1 {{ 
-                    color: #2c3e50; 
-                    text-align: center;
-                    border-bottom: 3px solid #3498db;
-                    padding-bottom: 10px;
-                }}
-                .formula {{
-                    background: #ecf0f1;
-                    padding: 15px;
-                    margin: 20px 0;
-                    border-left: 4px solid #3498db;
-                    font-family: 'Courier New', monospace;
-                    font-size: 14px;
-                }}
-                .info {{ 
-                    background: #e8f5e9; 
-                    padding: 15px; 
-                    margin: 15px 0; 
-                    border-radius: 5px;
-                    border-left: 4px solid #4caf50;
-                }}
-                .criteria {{
-                    background: #fff3e0;
-                    padding: 15px;
-                    margin: 15px 0;
-                    border-radius: 5px;
-                    border-left: 4px solid #ff9800;
-                }}
-                table {{ 
-                    width: 100%; 
-                    border-collapse: collapse; 
-                    margin: 20px 0;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }}
-                th, td {{ 
-                    border: 1px solid #bdc3c7; 
-                    padding: 10px; 
-                    text-align: center;
-                }}
-                th {{ 
-                    background-color: #3498db; 
-                    color: white;
-                    font-weight: bold;
-                }}
-                tr:nth-child(even) {{ 
-                    background-color: #ecf0f1; 
-                }}
-                tr:hover {{
-                    background-color: #d5dbdb;
-                }}
-                .grade-A {{ background-color: #2ecc71; color: white; font-weight: bold; }}
-                .grade-B {{ background-color: #f1c40f; color: black; font-weight: bold; }}
-                .grade-C {{ background-color: #e67e22; color: white; font-weight: bold; }}
-                .grade-D {{ background-color: #e74c3c; color: white; font-weight: bold; }}
-                .grade-E {{ background-color: #7f8c8d; color: white; font-weight: bold; }}
-                .footer {{
-                    margin-top: 30px;
-                    padding-top: 15px;
-                    border-top: 2px solid #bdc3c7;
-                    text-align: center;
-                    font-size: 12px;
-                    color: #7f8c8d;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📊 Rasch Model - Test Natijalari</h1>
-            
-            <div class="formula">
-                <strong>Baholash formulasi (Rasch Model):</strong><br><br>
-                Z = (θ - μ) / σ<br>
-                T = 50 + 10Z<br><br>
-                Bu yerda:<br>
-                • θ (theta) - talabaning qobiliyati<br>
-                • μ (mu) - o'rtacha qiymat<br>
-                • σ (sigma) - standart tafovut<br>
-                • Z - Z-score (standartlashtirilgan ball)<br>
-                • T - T-score (standart ball, 0-100 oralig'ida)
-            </div>
-            
-            <div class="info">
-                <h3>📈 Umumiy Statistika</h3>
-                <p><strong>Jami talabalar:</strong> {statistics['total_students']}</p>
-                <p><strong>Jami savollar:</strong> {statistics['total_questions']}</p>
-                <p><strong>O'rtacha foiz:</strong> {statistics['avg_percentage']:.2f}%</p>
-                <p><strong>O'rtacha θ (theta):</strong> {statistics.get('avg_theta', 0):.4f}</p>
-                <p><strong>Standart tafovut (σ):</strong> {statistics.get('std_theta', 1):.4f}</p>
-                <p><strong>O'rtacha T-score:</strong> {statistics.get('avg_t_score', 50):.2f}</p>
-                <p><strong>Eng yuqori θ:</strong> {statistics.get('max_theta', 0):.4f}</p>
-                <p><strong>Eng past θ:</strong> {statistics.get('min_theta', 0):.4f}</p>
-                <p><strong>Tahlil vaqti:</strong> {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}</p>
-            </div>
-            
-            <div class="criteria">
-                <h3>📊 Baholash Mezonlari</h3>
-                <table style="width: 60%; margin: 0 auto;">
-                    <tr>
-                        <th>Baho</th>
-                        <th>T-score oralig'i</th>
-                        <th>Daraja</th>
-                    </tr>
-                    <tr>
-                        <td class="grade-A">A</td>
-                        <td>T ≥ 70</td>
-                        <td>A'lo</td>
-                    </tr>
-                    <tr>
-                        <td class="grade-B">B</td>
-                        <td>60 ≤ T &lt; 70</td>
-                        <td>Yaxshi</td>
-                    </tr>
-                    <tr>
-                        <td class="grade-C">C</td>
-                        <td>50 ≤ T &lt; 60</td>
-                        <td>Qoniqarli</td>
-                    </tr>
-                    <tr>
-                        <td class="grade-D">D</td>
-                        <td>40 ≤ T &lt; 50</td>
-                        <td>Qoniqarsiz</td>
-                    </tr>
-                    <tr>
-                        <td class="grade-E">E</td>
-                        <td>T &lt; 40</td>
-                        <td>Juda past</td>
-                    </tr>
-                </table>
-            </div>
-            
-            <h2 style="text-align: center; margin-top: 30px;">Barcha talabalar natijalari (T-score bo'yicha tartiblangan)</h2>
-            <table>
-                <tr>
-                    <th>#</th>
-                    <th>Talabgor</th>
-                    <th>To'g'ri / Jami</th>
-                    <th>Foiz (%)</th>
-                    <th>θ (Theta)</th>
-                    <th>Z-score</th>
-                    <th>T-score</th>
-                    <th>Baho</th>
-                </tr>
-        """
-        
-        # Har bir talaba uchun natijalarni jadvaldga qo'shish
-        for idx, student in enumerate(students_results, 1):
-            t_score = student.get('t_score', 50)
-            theta = student.get('theta', 0)
-            
-            # Z-score ni hisoblash
-            avg_theta = statistics.get('avg_theta', 0)
-            std_theta = statistics.get('std_theta', 1)
-            z_score = (theta - avg_theta) / std_theta if std_theta != 0 else 0
-            
-            # Baho va rang
-            if t_score >= 70:
-                grade = "A"
-                grade_class = "grade-A"
-            elif t_score >= 60:
-                grade = "B"
-                grade_class = "grade-B"
-            elif t_score >= 50:
-                grade = "C"
-                grade_class = "grade-C"
-            elif t_score >= 40:
-                grade = "D"
-                grade_class = "grade-D"
-            else:
-                grade = "E"
-                grade_class = "grade-E"
-            
-            html_content += f"""
-                <tr>
-                    <td>{idx}</td>
-                    <td>{student['user_id']}</td>
-                    <td>{student['correct']}/{student['total']}</td>
-                    <td>{student['percentage']:.1f}%</td>
-                    <td>{theta:.4f}</td>
-                    <td>{z_score:.4f}</td>
-                    <td><strong>{t_score:.2f}</strong></td>
-                    <td class="{grade_class}">{grade}</td>
-                </tr>
-            """
-        
-        html_content += """
-            </table>
-            
-            <div class="footer">
-                <p><strong>Rasch Model IRT (Item Response Theory)</strong></p>
-                <p>Test talabalar natijalarini ilmiy usulda baholash tizimi</p>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Fallback matni (reportlab uchun)
-        fallback_lines = [
-            "Rasch Model Baholash Natijalari",
-            f"Jami talabalar: {statistics['total_students']}",
-            f"Jami savollar: {statistics['total_questions']}",
-            f"O'rtacha foiz: {statistics['avg_percentage']:.1f}%",
-            f"O'rtacha θ (theta): {statistics.get('avg_theta', 0):.2f}",
-            f"Standart tafovut (σ): {statistics.get('std_theta', 0):.2f}",
-            f"O'rtacha T-score: {statistics.get('avg_t_score', 50):.1f}",
-            "",
-            "Baholash mezonlari:",
-            "  A (A'lo)       : T ≥ 70",
-            "  B (Yaxshi)     : 60 ≤ T < 70",
-            "  C (Qoniqarli)  : 50 ≤ T < 60",
-            "  D (Qoniqarsiz) : 40 ≤ T < 50",
-            "  E (Juda past)  : T < 40",
-            "",
-            "Talabalar (T-score bo'yicha):"
-        ]
-        for idx, student in enumerate(students_results, 1):
-            fallback_lines.append(
-                f"{idx}. Talabgor: {student['user_id']} | "
-                f"{student['correct']}/{student['total']} | "
-                f"{student['percentage']:.1f}% | "
-                f"θ: {student.get('theta', 0):.2f} | "
-                f"T: {student.get('t_score', 0):.2f}"
-            )
-        
-        # generate_pdf funksiyasidan foydalanish
-        pdf_file = generate_pdf(
-            f"rasch_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            {
-                'html_content': html_content,
-                'fallback_title': "Rasch Model Baholash Natijalari",
-                'fallback_lines': fallback_lines
-            }
-        )
-        
-        await update.message.reply_text(text)
-        
-        if pdf_file:
-            try:
-                await update.message.reply_document(
-                    document=pdf_file,
-                    filename=f"rasch_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                    caption="📊 Rasch Model Baholash Natijalari (PDF)\n\nFormula: T = 50 + 10Z, bu yerda Z = (θ - μ) / σ"
-                )
-            except Exception as doc_error:
-                logger.error(f"PDF yuborish xatosi: {doc_error}")
-                await update.message.reply_text("⚠️ PDF yuborib bo'lmadi, lekin natijalar yuborildi.")
-        else:
-            logger.warning("PDF yaratib bo'lmadi")
-            await update.message.reply_text("⚠️ PDF yaratib bo'lmadi, lekin natijalar yuborildi.")
-        
-        # Vaqtinchalik faylni o'chirish
-        try:
-            os.remove(temp_file_path)
-        except:
-            pass
-        
-        context.user_data.pop('waiting_for_rasch_matrix', None)
-        
-    except Exception as e:
-        logger.error(f"Rasch matrix qayta ishlash xatosi: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        await update.message.reply_text(f"❌ Xatolik: {str(e)}\n\nIltimos, fayl formatini tekshiring.")
-        context.user_data.pop('waiting_for_rasch_matrix', None)
-

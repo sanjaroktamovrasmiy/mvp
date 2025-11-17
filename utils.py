@@ -16,7 +16,6 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import load_data
-from rasch_pkg import RaschModel
 from openpyxl import Workbook, load_workbook
 
 logger = logging.getLogger(__name__)
@@ -41,76 +40,6 @@ async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # Agar kanal topilmasa, xavfsizlik uchun False qaytaramiz
             return False
     return True
-
-
-def calculate_rasch_score(results, questions):
-    """
-    Haqiqiy Rasch model kutubxonasi (rasch-pkg) orqali ball hisoblash
-    Rasch modeli: P(X=1|θ, β) = exp(θ - β) / (1 + exp(θ - β))
-    Bu yerda θ - foydalanuvchining qobiliyati, β - savolning qiyinligi
-    
-    rasch-pkg kutubxonasi orqali ilmiy hisob-kitob qilinadi
-    """
-    try:
-        correct_count = sum(1 for r in results if r['is_correct'])
-        total = len(results)
-        
-        if total == 0:
-            return 0.0
-        
-        # Rasch model obyektini yaratish (rasch-pkg kutubxonasi)
-        rasch_model = RaschModel()
-        
-        # Foydalanuvchi javoblarini matritsaga aylantirish
-        # 1 = to'g'ri javob, 0 = noto'g'ri javob
-        responses = [1 if r['is_correct'] else 0 for r in results]
-        
-        # Rasch model orqali foydalanuvchi qobiliyatini hisoblash
-        # rasch-pkg kutubxonasining ilmiy metodlaridan foydalanish
-        try:
-            # calculate_theta - foydalanuvchi qobiliyatini (theta) hisoblash
-            # Theta - Rasch modelida foydalanuvchi qobiliyati o'lchovi
-            # Metod: calculate_theta(correct_answers: int, total_questions: int)
-            theta = rasch_model.calculate_theta(correct_count, total)
-            
-            # Theta ni Rasch score ga aylantirish
-            rasch_score = float(theta)
-            
-        except Exception as method_error:
-            logger.warning(f"Rasch model metodlari xatosi: {method_error}, oddiy logit transformatsiya ishlatilmoqda")
-            # Agar metodlar ishlamasa, oddiy logit transformatsiya
-            p = correct_count / total
-            if p > 0 and p < 1:
-                logit = np.log(p / (1 - p))
-                rasch_score = float(logit)
-            elif p == 1:
-                rasch_score = 3.0
-            else:
-                rasch_score = -3.0
-        
-        # Score ni -3 dan +3 gacha shkalaga normalizatsiya qilish
-        rasch_score = np.clip(rasch_score, -3.0, 3.0)
-        
-        return float(rasch_score)
-        
-    except Exception as e:
-        logger.error(f"Rasch model kutubxonasi xatosi: {e}")
-        # Xatolik bo'lsa, oddiy logit transformatsiya qilamiz
-        try:
-            correct_count = sum(1 for r in results if r['is_correct'])
-            total = len(results)
-            if total == 0:
-                return 0.0
-            
-            p = correct_count / total
-            if p > 0 and p < 1:
-                logit = np.log(p / (1 - p))
-                return float(np.clip(logit, -3.0, 3.0))
-            else:
-                return 3.0 if p == 1 else -3.0
-        except Exception as e2:
-            logger.error(f"Fallback Rasch hisoblash xatosi: {e2}")
-            return 0.0
 
 
 def generate_pdf(result_id, result_data):
@@ -192,7 +121,6 @@ def _build_default_result_html(result_data):
                 <p><strong>Sana:</strong> {result_data.get('completed_at', '')}</p>
                 <p><strong>To'g'ri javoblar:</strong> {result_data.get('correct', 0)}/{result_data.get('total', 0)}</p>
                 <p><strong>Foiz:</strong> {result_data.get('percentage', 0):.1f}%</p>
-                <p><strong>Rasch Score:</strong> {result_data.get('rasch_score', 0.0):.2f}</p>
             </div>
             <h2>Javoblar tafsiloti:</h2>
         """
@@ -234,9 +162,6 @@ def _build_fallback_lines_from_result(result_data):
         percentage = result_data.get('percentage')
         if percentage is not None:
             lines.append(f"Foiz: {percentage:.1f}%")
-        rasch_score = result_data.get('rasch_score')
-        if rasch_score is not None:
-            lines.append(f"Rasch score: {rasch_score:.2f}")
         lines.append("")
         lines.append("Javoblar tafsiloti:")
         for idx, res in enumerate(result_data.get('results', []), 1):
@@ -377,87 +302,4 @@ def generate_response_matrix(test_id, data):
         logger.error(f"Matrix yaratish xatosi: {e}")
         return None, None
 
-
-def evaluate_students_from_matrix(file_path):
-    """
-    Excel matrix faylidan talabalarni Rasch modeliga asoslanib baholash
-    T = 50 + 10Z formulasi bilan standart ball hisoblash
-    
-    Args:
-        file_path: Excel fayl yo'li (.xlsx)
-    
-    Returns:
-        list: Talabalar natijalari ro'yxati
-        dict: Umumiy statistika
-    """
-    try:
-        # Excel faylni yuklash
-        wb = load_workbook(file_path)
-        ws = wb.active
-        
-        # Header qatorini o'qish
-        header_row = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0]
-        if not header_row:
-            return None, None
-        
-        # Savollar sonini aniqlash (user_id dan tashqari)
-        question_columns = [col for col in header_row[1:] if col and str(col).startswith('Q')]
-        total_questions = len(question_columns)
-        
-        if total_questions == 0:
-            return None, None
-        
-        # Response matrix yaratish
-        response_matrix = []
-        user_ids = []
-        
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            if not row or not row[0]:  # user_id bo'sh bo'lsa, o'tkazib yuborish
-                continue
-            
-            user_id = str(row[0])
-            user_ids.append(user_id)
-            responses = []
-            
-            # Javoblarni olish (1 yoki 0)
-            for col_idx in range(1, min(len(row), total_questions + 1)):
-                value = row[col_idx]
-                if value is None:
-                    responses.append(0)
-                elif isinstance(value, (int, float)):
-                    responses.append(1 if value == 1 else 0)
-                elif isinstance(value, str):
-                    responses.append(1 if value.strip() == '1' else 0)
-                else:
-                    responses.append(0)
-            
-            # Agar javoblar soni etarli bo'lmasa, 0 bilan to'ldirish
-            while len(responses) < total_questions:
-                responses.append(0)
-            
-            response_matrix.append(responses)
-        
-        if not response_matrix:
-            return None, None
-        
-        # Response matrix ni numpy array ga aylantirish
-        response_matrix = np.array(response_matrix)
-        
-        # Rasch modelini import qilish va baholash
-        from rasch_pkg import evaluate_with_rasch
-        
-        # Rasch model orqali to'liq baholash (fit qilish)
-        students_results, statistics = evaluate_with_rasch(response_matrix, user_ids)
-        
-        if students_results is None or statistics is None:
-            logger.error("Rasch model baholash muvaffaqiyatsiz tugadi")
-            return None, None
-        
-        return students_results, statistics
-        
-    except Exception as e:
-        logger.error(f"Matrix baholash xatosi: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None, None
 
