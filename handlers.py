@@ -710,63 +710,51 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     )
                     return
             
-            # 36-40 savollar uchun yozma javoblarni tekshirish (IXTIYORIY)
-            # Agar kiritilgan bo'lsa, faqat kiritilganlarni saqlash
-            # Agar kiritilmagan bo'lsa (0 ta), avtomatik ravishda vaqt belgilashga o'tish
+            # 36-40 savollar uchun yozma javoblarni tekshirish
+            # Har doim 36-40 savollar uchun yozma javoblar so'raladi
             
-            if len(text_answers) == 0:
-                # Hech qanday yozma javob kiritilmagan - bu normal, davom etamiz
-                # 36-40 savollar yo'q deb hisoblaymiz
-                context.user_data['mc_answers'] = mc_answers_list
-                
-                # Savollarni yaratish
-                questions = []
-                for idx, answer in enumerate(mc_answers_list):
-                    if idx in [32, 33, 34]:  # 33, 34, 35-savollar
-                        options = ['a', 'b', 'c', 'd', 'e', 'f']
-                        questions.append({
-                            'question': f"Savol {idx + 1}",
-                            'options': options,
-                            'correct': answer
-                        })
-                    else:
-                        options = ['a', 'b', 'c', 'd']
-                        questions.append({
-                            'question': f"Savol {idx + 1}",
-                            'options': options,
-                            'correct': answer
-                        })
-                
-                context.user_data['test_questions'] = questions
-                
-                # Test darhol yaratiladi
-                await save_test_immediately(update, context)
-                return
-            elif len(text_answers) < 5:
-                # Ba'zi yozma javoblar kiritilgan, lekin barcha emas
-                # Qolgan javoblarni so'rash (lekin MAJBURIY emas)
+            if len(text_answers) < 5:
+                # Ba'zi yozma javoblar kiritilgan yoki hech qanday yozma javob kiritilmagan
+                # 36-40 savollar uchun javoblarni so'rash
                 context.user_data['test_creation_step'] = 'text_answers'
                 context.user_data['mc_answers'] = mc_answers_list
                 
                 missing = [q for q in range(36, 41) if q not in text_answers]
-                if missing:
-                    keyboard = [
-                        [InlineKeyboardButton("⏭️ Qolgan javoblarni o'tkazib yuborish", callback_data="skip_text_answers")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
+                
+                keyboard = [
+                    [InlineKeyboardButton("⏭️ Qolgan javoblarni o'tkazib yuborish", callback_data="skip_text_answers")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                if len(text_answers) == 0:
+                    # Hech qanday yozma javob kiritilmagan - barcha 5 ta javobni so'rash
+                    await update.message.reply_text(
+                        f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                        f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                        f"Har bir savol uchun alohida qatorda javob yozing:\n\n"
+                        f"Masalan:\n"
+                        f"36-savol javobi\n"
+                        f"37-savol javobi\n"
+                        f"38-savol javobi\n"
+                        f"39-savol javobi\n"
+                        f"40-savol javobi\n\n"
+                        f"📌 Yoki barcha javoblarni o'tkazib yuborishingiz mumkin:",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    # Ba'zi javoblar kiritilgan, qolganlarini so'rash
                     await update.message.reply_text(
                         f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
                         f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
                         f"⚠️ Quyidagi savollar uchun javoblar kerak: {', '.join(map(str, missing))}\n\n"
-                        f"Har bir savol uchun alohida qatorda javob yozing yoki qavs ichida kiriting:\n"
+                        f"Har bir savol uchun alohida qatorda javob yozing:\n\n"
                         f"Masalan:\n"
-                        f"38savol javobi\n"
-                        f"39savol javobi\n\n"
+                        f"Javob 36-savolga\n"
+                        f"Javob 37-savolga\n\n"
                         f"📌 Yoki qolgan javoblarni o'tkazib yuborishingiz mumkin:",
                         reply_markup=reply_markup
                     )
-                    return
+                return
             else:
                 # Barcha 5 ta yozma javob kiritilgan
                 text_answers_list = []
