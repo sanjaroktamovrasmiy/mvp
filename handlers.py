@@ -771,6 +771,89 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             logger.error(f"43-savol javoblarini qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
     
+    elif step == 'answers':
+        # 1-35 savollar uchun javoblar kiritildi
+        answers_text = update.message.text.strip()
+        if answers_text.lower() == '/cancel':
+            context.user_data.clear()
+            await update.message.reply_text("❌ Test yaratish bekor qilindi.")
+            return
+        
+        try:
+            # Javoblarni qayta ishlash
+            mc_answers = {}  # {question_num: answer}
+            
+            # Raqam + harf kombinatsiyalarini topish (1a, 2b, 10c, ...)
+            pattern = r'(\d+)([a-fA-F])'
+            matches = re.findall(pattern, answers_text)
+            for num_str, letter in matches:
+                q_num = int(num_str)
+                if q_num <= 35:
+                    mc_answers[q_num] = letter.lower()
+            
+            # Agar raqam+harf formatida yetarli javob bo'lmasa, eski formatni sinab ko'rish
+            if len(mc_answers) < 35:
+                # Eski format: faqat harflar (abc...)
+                answers = []
+                for char in answers_text.lower():
+                    question_idx = len(answers)
+                    if question_idx >= 35:
+                        break
+                    if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
+                        if char in 'abcdef':
+                            answers.append(char)
+                    else:
+                        if char in 'abcd':
+                            answers.append(char)
+                
+                if len(answers) == 35:
+                    # Eski format ishladi
+                    mc_answers = {i+1: answers[i] for i in range(len(answers))}
+                else:
+                    await update.message.reply_text(
+                        f"❌ Javoblar soni noto'g'ri!\n\n"
+                        f"⚠️ 1-35 savollar uchun 35 ta javob kerak.\n"
+                        f"🔢 Hozirgi son: {len(answers)} ta\n\n"
+                        f"Format: 1a2b3c4d... yoki abc... (35 ta javob)\n"
+                        f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+                    )
+                    return
+            
+            # 1-35 savollar uchun javoblarni listga o'tkazish
+            mc_answers_list = []
+            for q_num in range(1, 36):
+                if q_num in mc_answers:
+                    mc_answers_list.append(mc_answers[q_num])
+                else:
+                    await update.message.reply_text(
+                        f"❌ {q_num}-savol uchun javob topilmadi!\n\n"
+                        f"Barcha 1-35 savollar uchun javoblar kerak.\n"
+                        f"Format: 1a2b3c4d... yoki abc... (35 ta javob)"
+                    )
+                    return
+            
+            # Javoblarni saqlash va 36-40 savollar uchun javoblarni so'rash
+            context.user_data['mc_answers'] = mc_answers_list
+            context.user_data['test_creation_step'] = 'text_answers'
+            
+            await update.message.reply_text(
+                f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                f"📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                f"⚠️ Har bir savol uchun alohida qatorda javob yozing (jami 5 ta qator):\n\n"
+                f"Masalan:\n"
+                f"ahsb\n"
+                f"hhhsbb\n"
+                f"cccccc\n"
+                f"uuus77\n"
+                f"javob40\n\n"
+                f"⚠️ Barcha savollarga javob berish majburiy!"
+            )
+            return
+        
+        except Exception as e:
+            logger.error(f"1-35 javoblar qayta ishlash xatosi: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)}")
+    
 
 
 async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
