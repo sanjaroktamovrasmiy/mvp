@@ -130,17 +130,24 @@ The bot interface is in Uzbek language.
 
 ## Recent Changes
 
-### November 17, 2025 - Matrix Export Enhancement
-- Completely redesigned matrix export functionality in `utils.py`
-- Now generates three separate Excel sheets in one file:
-  1. **Multiple Choice (1-35)**: 0/1 matrix for questions 1-35 only
-  2. **Text Answers (36-40)**: Separate sheet with student and correct answers
-  3. **Problems (41-43)**: Separate sheet with student and correct answers
-- Fixed issue where questions 36-40 showed "0" for both correct and incorrect answers
-- Questions with `is_correct=None` now properly display "N/A" instead of "0"
-- Questions 41-43 removed from main matrix and placed in dedicated sheet
-- Matrix files now include timestamp: `matrix_{test_id}_{timestamp}.xlsx`
-- Improved Excel formatting with bold headers and centered alignment
+### November 17, 2025 - Complete System Overhaul for Auto-Grading
+- **All questions (1-43) now auto-graded**: Removed manual review requirement
+- **Test submission flow fixed**: Added 41-43 question answer input functionality
+- **Matrix export redesigned** in `utils.py`:
+  - Sheet 1: "Questions 1-40" - 0/1 matrix for all multiple choice and text questions
+  - Sheet 2: "Questions 41-43" - 0/1 matrix for problem-based questions (separate sheet)
+  - All questions use 0/1 format (no more N/A or None values)
+  - Matrix files include timestamp: `matrix_{test_id}_{timestamp}.xlsx`
+- **Auto-grading implementation** in `handlers.py`:
+  - Questions 1-35: Multiple choice (exact match)
+  - Questions 36-40: Text answers (case-insensitive comparison)
+  - Questions 41-43: Problem answers (comma-separated, case-insensitive, all sub-answers must match)
+- **Test flow improvements**:
+  - Step 1: Enter answers for questions 1-35 (e.g., 1a2b3c4d...)
+  - Step 2: Enter answers for questions 36-40 (one per line)
+  - Step 3: Enter answers for questions 41-43 (one per line for all sub-questions)
+  - Added `waiting_problem_answers` state for proper flow control
+- **Percentage calculation**: Now based on all 43 questions (not just 1-35)
 
 ### November 17, 2025 - Rasch Model Removal
 - Removed Rasch Model IRT implementation completely
