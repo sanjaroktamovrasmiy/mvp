@@ -130,6 +130,18 @@ The bot interface is in Uzbek language.
 
 ## Recent Changes
 
+### November 17, 2025 - Matrix Export Enhancement
+- Completely redesigned matrix export functionality in `utils.py`
+- Now generates three separate Excel sheets in one file:
+  1. **Multiple Choice (1-35)**: 0/1 matrix for questions 1-35 only
+  2. **Text Answers (36-40)**: Separate sheet with student and correct answers
+  3. **Problems (41-43)**: Separate sheet with student and correct answers
+- Fixed issue where questions 36-40 showed "0" for both correct and incorrect answers
+- Questions with `is_correct=None` now properly display "N/A" instead of "0"
+- Questions 41-43 removed from main matrix and placed in dedicated sheet
+- Matrix files now include timestamp: `matrix_{test_id}_{timestamp}.xlsx`
+- Improved Excel formatting with bold headers and centered alignment
+
 ### November 17, 2025 - Rasch Model Removal
 - Removed Rasch Model IRT implementation completely
 - Switched to simple percentage-based scoring
