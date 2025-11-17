@@ -504,45 +504,52 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif step == 'text_answers':
         # 36-40 savollar uchun yozma javoblar kiritildi
-        text_answers_input = update.message.text.strip()
-        if text_answers_input == '/cancel':
+        text_answers_input = update.message.text
+        if text_answers_input.strip() == '/cancel':
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
         
         try:
-            # Yozma javoblarni qatorlarga ajratish va qavs ichidagi matnlarni birlashtirish
+            # Yozma javoblarni qatorlarga ajratish
+            # Bo'sh qatorlar ham qabul qilinadi (5 ta qator bo'lishi kerak)
             lines = text_answers_input.split('\n')
-            text_answers = []
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # Qavs ichidagi matnni topish va olib tashlash (alohida javob deb hisoblanmasligi uchun)
-                # Qavs ichidagi matn javobning bir qismi bo'lib qoladi
-                # Masalan: "Javob (qavs ichidagi)" -> "Javob (qavs ichidagi)" butun javob bo'ladi
-                # Lekin qavs ichidagi matn alohida qator deb hisoblanmaydi
-                
-                # Agar qator qavs bilan boshlansa va tugasa, uni bitta javob deb hisoblaymiz
-                # Lekin qavs ichidagi matn alohida javob emas, faqat tushuntirish
+            # Faqat birinchi 5 ta qatorni olish
+            text_answers = []
+            for i in range(min(5, len(lines))):
+                line = lines[i].strip()
                 text_answers.append(line)
             
-            # 36-40 savollar uchun 5 ta javob kerak
-            if len(text_answers) != 5:
+            # Agar 5 ta qatordan kam bo'lsa, xatolik berish
+            if len(text_answers) < 5:
                 await update.message.reply_text(
                     f"❌ Yozma javoblar soni noto'g'ri!\n\n"
-                    f"36-40 savollar uchun 5 ta javob kerak.\n"
-                    f"Hozirgi son: {len(text_answers)} ta\n\n"
-                    f"Har bir savol uchun alohida qatorda javob yozing.\n"
-                    f"Qavs ichida tushuntirish yozishingiz mumkin:\n"
+                    f"36-40 savollar uchun 5 ta qator kerak.\n"
+                    f"Hozirgi son: {len(text_answers)} ta qator\n\n"
+                    f"Har bir savol uchun alohida qatorda javob yozing:\n\n"
                     f"Masalan:\n"
-                    f"Javob 36-savolga (tushuntirish)\n"
-                    f"Javob 37-savolga\n"
-                    f"Javob 38-savolga (qavs ichidagi matn)\n"
-                    f"Javob 39-savolga\n"
-                    f"Javob 40-savolga"
+                    f"ahsb\n"
+                    f"hhhsbb\n"
+                    f"\n"
+                    f"uuus77\n"
+                    f"\n\n"
+                    f"ℹ️ Bo'sh qatorlar javob berilmagan degan ma'noni bildiradi."
+                )
+                return
+            
+            # Bo'sh javoblarni tekshirish - barcha javoblar majburiy
+            empty_questions = []
+            for i, answer in enumerate(text_answers):
+                if not answer:  # Bo'sh qator
+                    empty_questions.append(36 + i)
+            
+            if empty_questions:
+                await update.message.reply_text(
+                    f"❌ Barcha savollarga javob berish majburiy!\n\n"
+                    f"Quyidagi savollar uchun javoblar kiritilmagan:\n"
+                    f"{', '.join(map(str, empty_questions))}-savollar\n\n"
+                    f"Iltimos, barcha 5 ta savol uchun javoblarni kiriting."
                 )
                 return
             
@@ -714,46 +721,24 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             # Har doim 36-40 savollar uchun yozma javoblar so'raladi
             
             if len(text_answers) < 5:
-                # Ba'zi yozma javoblar kiritilgan yoki hech qanday yozma javob kiritilmagan
+                # Hech qanday yozma javob kiritilmagan yoki ba'zi javoblar kiritilgan
                 # 36-40 savollar uchun javoblarni so'rash
                 context.user_data['test_creation_step'] = 'text_answers'
                 context.user_data['mc_answers'] = mc_answers_list
                 
-                missing = [q for q in range(36, 41) if q not in text_answers]
-                
-                keyboard = [
-                    [InlineKeyboardButton("⏭️ Qolgan javoblarni o'tkazib yuborish", callback_data="skip_text_answers")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                if len(text_answers) == 0:
-                    # Hech qanday yozma javob kiritilmagan - barcha 5 ta javobni so'rash
-                    await update.message.reply_text(
-                        f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
-                        f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
-                        f"Har bir savol uchun alohida qatorda javob yozing:\n\n"
-                        f"Masalan:\n"
-                        f"36-savol javobi\n"
-                        f"37-savol javobi\n"
-                        f"38-savol javobi\n"
-                        f"39-savol javobi\n"
-                        f"40-savol javobi\n\n"
-                        f"📌 Yoki barcha javoblarni o'tkazib yuborishingiz mumkin:",
-                        reply_markup=reply_markup
-                    )
-                else:
-                    # Ba'zi javoblar kiritilgan, qolganlarini so'rash
-                    await update.message.reply_text(
-                        f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
-                        f"📝 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
-                        f"⚠️ Quyidagi savollar uchun javoblar kerak: {', '.join(map(str, missing))}\n\n"
-                        f"Har bir savol uchun alohida qatorda javob yozing:\n\n"
-                        f"Masalan:\n"
-                        f"Javob 36-savolga\n"
-                        f"Javob 37-savolga\n\n"
-                        f"📌 Yoki qolgan javoblarni o'tkazib yuborishingiz mumkin:",
-                        reply_markup=reply_markup
-                    )
+                # Hech qanday yozma javob kiritilmagan - barcha 5 ta javobni so'rash
+                await update.message.reply_text(
+                    f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                    f"📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                    f"⚠️ Har bir savol uchun alohida qatorda javob yozing (jami 5 ta qator):\n\n"
+                    f"Masalan:\n"
+                    f"ahsb\n"
+                    f"hhhsbb\n"
+                    f"cccccc\n"
+                    f"uuus77\n"
+                    f"javob40\n\n"
+                    f"⚠️ Barcha savollarga javob berish majburiy!"
+                )
                 return
             else:
                 # Barcha 5 ta yozma javob kiritilgan
