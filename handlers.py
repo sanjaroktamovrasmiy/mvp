@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -28,22 +27,22 @@ logger = logging.getLogger(__name__)
 def generate_test_post(test_data, test_id, bot_username=None):
     """
     Test haqida ko'rkam va tushunarli post yaratish
-    
+
     Args:
         test_data: Test ma'lumotlari
         test_id: Test ID
         bot_username: Bot username (ixtiyoriy)
-    
+
     Returns:
         tuple: (post_text, inline_keyboard) - HTML formatidagi post matni va inline keyboard
     """
     test_name = test_data.get('name', 'Test')
     total_questions = len(test_data.get('questions', []))
-    
+
     # Bot username (agar berilmagan bo'lsa, default)
     if not bot_username:
         bot_username = "Test Bot"
-    
+
     post = f"""
 📝 <b>{test_name}</b>
 
@@ -60,13 +59,13 @@ def generate_test_post(test_data, test_id, bot_username=None):
 
 🎓 Muvaffaqiyatlar!
 """
-    
+
     # Inline keyboard yaratish - testni boshlash uchun
     keyboard = [
         [InlineKeyboardButton("🚀 Testni boshlash", callback_data=f"start_test_{test_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     return post, reply_markup
 
 
@@ -74,20 +73,20 @@ async def check_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Foydalanuvchining ism va familyasini tekshirish"""
     user_id = update.effective_user.id
     data = load_data()
-    
+
     # Foydalanuvchi ma'lumotlarini tekshirish
     user_info = data.get('users', {}).get(str(user_id), {})
     first_name = user_info.get('first_name', '').strip()
     last_name = user_info.get('last_name', '').strip()
-    
+
     # Ism va familya to'liq bo'lishi kerak
     if not first_name or not last_name:
         return False
-    
+
     # Ism va familya kamida 2 ta harfdan iborat bo'lishi kerak
     if len(first_name) < 2 or len(last_name) < 2:
         return False
-    
+
     return True
 
 
@@ -95,11 +94,11 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ism va familya kiritish jarayonini qayta ishlash"""
     if not update.message or not update.message.text:
         return
-    
+
     text = update.message.text.strip()
     user_id = update.effective_user.id
     step = context.user_data.get('name_step', 'first_name')
-    
+
     # Ism kiritish
     if step == 'first_name':
         # Ism validatsiyasi
@@ -109,7 +108,7 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📝 Ismingizni qayta kiriting:"
             )
             return
-        
+
         # Raqamlar yoki maxsus belgilar tekshiruvi (faqat harflar va probellar)
         if not all(c.isalpha() or c.isspace() for c in text):
             await update.message.reply_text(
@@ -117,17 +116,17 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📝 Ismingizni qayta kiriting:"
             )
             return
-        
+
         # Ismni saqlash
         context.user_data['first_name'] = text.strip()
         context.user_data['name_step'] = 'last_name'
-        
+
         await update.message.reply_text(
             "✅ Ism qabul qilindi!\n\n"
             "📝 Familyangizni kiriting:"
         )
         return
-    
+
     # Familya kiritish
     elif step == 'last_name':
         # Familya validatsiyasi
@@ -137,7 +136,7 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📝 Familyangizni qayta kiriting:"
             )
             return
-        
+
         # Raqamlar yoki maxsus belgilar tekshiruvi (faqat harflar va probellar)
         if not all(c.isalpha() or c.isspace() for c in text):
             await update.message.reply_text(
@@ -145,35 +144,35 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📝 Familyangizni qayta kiriting:"
             )
             return
-        
+
         # Familyani saqlash
         first_name = context.user_data.get('first_name', '').strip()
         last_name = text.strip()
-        
+
         # Ma'lumotlar bazasiga saqlash
         data = load_data()
         if 'users' not in data:
             data['users'] = {}
-        
+
         data['users'][str(user_id)] = {
             'first_name': first_name,
             'last_name': last_name,
             'registered_at': datetime.now().isoformat()
         }
         save_data(data)
-        
+
         # User data ni tozalash
         context.user_data.pop('waiting_for_name', None)
         context.user_data.pop('name_step', None)
         context.user_data.pop('first_name', None)
-        
+
         # Xush kelibsiz xabari
         full_name = f"{first_name} {last_name}"
         keyboard = [
             [KeyboardButton("📝 Test ishlash"), KeyboardButton("📊 Test natijalarim")]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        
+
         await update.message.reply_text(
             f"✅ {full_name}, ma'lumotlaringiz qabul qilindi!\n\n"
             f"Endi botdan foydalanishingiz mumkin.",
@@ -184,11 +183,11 @@ async def process_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start komandasi"""
     user_id = update.effective_user.id
-    
+
     # Majburiy obuna tekshiruvi
     if not await check_subscription(update, context):
         data = load_data()
-        
+
         # Inline keyboard yaratish kanallar uchun
         keyboard = []
         for ch in data["mandatory_channels"]:
@@ -214,53 +213,53 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text=f"📢 {button_text}",
                     url=f"https://t.me/{channel_username}"
                 )])
-        
+
         # Inline keyboard markup yaratish
         reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-        
+
         # Kanal ro'yxatini matn sifatida ham ko'rsatish
         channels_text = "\n".join([
             f"• {ch if ch.startswith('@') else f'@{ch}' if not ch.startswith('-') else f'Kanal ID: {ch}'}"
             for ch in data["mandatory_channels"]
         ])
-        
+
         text = f"❌ Botdan foydalanish uchun quyidagi kanallarga obuna bo'lishingiz kerak:\n\n{channels_text}\n\n"
         text += "Quyidagi tugmalar orqali kanallarga o'ting va obuna bo'ling.\n"
         text += "Obuna bo'lgach, /start ni qayta bosing."
-        
+
         await update.message.reply_text(text, reply_markup=reply_markup)
         return
-    
+
     # Ism va familya tekshiruvi
     if not await check_user_name(update, context):
         # Ism va familya kiritish rejimini boshlash
         context.user_data['waiting_for_name'] = True
         context.user_data['name_step'] = 'first_name'
-        
+
         await update.message.reply_text(
             "👤 Botdan foydalanish uchun ism va familyangizni kiriting.\n\n"
             "Iltimos, to'g'ri ism va familyangizni kiriting:\n\n"
             "📝 Ismingizni kiriting:"
         )
         return
-    
+
     # Foydalanuvchi turini aniqlash
     data = load_data()
     is_boss = user_id == BOSS_ID
     is_admin = user_id in data["admins"]
-    
+
     # Reply keyboard markup yaratish (barcha foydalanuvchilar uchun)
     keyboard = [
         [KeyboardButton("📝 Test ishlash"), KeyboardButton("📊 Test natijalarim")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    
+
     # Foydalanuvchi ismi va familyasini olish
     user_info = data.get('users', {}).get(str(user_id), {})
     first_name = user_info.get('first_name', '')
     last_name = user_info.get('last_name', '')
     full_name = f"{first_name} {last_name}".strip()
-    
+
     if is_boss:
         text = f"👑 {full_name}, Boss paneliga xush kelibsiz!\n\n"
         text += "/admin - Adminlar boshqaruvi\n"
@@ -274,7 +273,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text = f"👋 {full_name}, Test botiga xush kelibsiz!\n\n"
         text += "Quyidagi tugmalardan foydalaning:"
-    
+
     await update.message.reply_text(text, reply_markup=reply_markup)
 
 
@@ -283,7 +282,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != BOSS_ID:
         await update.message.reply_text("❌ Bu funksiya faqat boss uchun!")
         return
-    
+
     data = load_data()
     keyboard = [
         [InlineKeyboardButton("➕ Admin qo'shish", callback_data="add_admin")],
@@ -299,7 +298,7 @@ async def channels_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != BOSS_ID:
         await update.message.reply_text("❌ Bu funksiya faqat boss uchun!")
         return
-    
+
     data = load_data()
     keyboard = [
         [InlineKeyboardButton("➕ Kanal qo'shish", callback_data="add_channel")],
@@ -314,15 +313,15 @@ async def create_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test yaratish"""
     user_id = update.effective_user.id
     data = load_data()
-    
+
     if user_id != BOSS_ID and user_id not in data["admins"]:
         await update.message.reply_text("❌ Bu funksiya faqat adminlar uchun!")
         return
-    
+
     # Test yaratish rejimini boshlash
     context.user_data['creating_test'] = True
     context.user_data['test_creation_step'] = 'name'
-    
+
     await update.message.reply_text(
         "📝 Test yaratish:\n\n"
         "Test nomini kiriting:\n\n"
@@ -334,22 +333,22 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
     """Test tahrirlash jarayonini qayta ishlash"""
     if not context.user_data.get('editing_test'):
         return
-    
+
     if not update.message or not update.message.text:
         return
-    
+
     user_id = update.effective_user.id
     test_id = context.user_data.get('editing_test_id')
     step = context.user_data.get('test_editing_step', 'name')
-    
+
     data = load_data()
     if test_id not in data['tests']:
         await update.message.reply_text("❌ Test topilmadi!")
         context.user_data.pop('editing_test', None)
         return
-    
+
     test = data['tests'][test_id]
-    
+
     if step == 'name':
         # Test nomi o'zgartirildi
         new_name = update.message.text.strip()
@@ -359,7 +358,7 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data.pop('test_editing_step', None)
             await update.message.reply_text("❌ Tahrirlash bekor qilindi.")
             return
-        
+
         test['name'] = new_name
         save_data(data)
         context.user_data.pop('editing_test', None)
@@ -367,7 +366,7 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data.pop('test_editing_step', None)
         await update.message.reply_text(f"✅ Test nomi o'zgartirildi: {new_name}")
         return
-    
+
     elif step == 'answers':
         # Javoblar o'zgartirildi
         answers_text = update.message.text.strip().lower()
@@ -377,15 +376,15 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data.pop('test_editing_step', None)
             await update.message.reply_text("❌ Tahrirlash bekor qilindi.")
             return
-        
+
         try:
             questions = test['questions']
             answers = []
-            
+
             for char in answers_text:
                 if char.lower() in 'abcd':
                     answers.append(char.lower())
-            
+
             if len(answers) != len(questions):
                 await update.message.reply_text(
                     f"❌ Javoblar soni noto'g'ri!\n"
@@ -394,30 +393,30 @@ async def process_test_editing(update: Update, context: ContextTypes.DEFAULT_TYP
                     f"Qayta kiriting: 1a2b3c4d... formatida"
                 )
                 return
-            
+
             # Javoblarni yangilash
             for idx, answer in enumerate(answers):
                 if idx < len(questions):
                     questions[idx]['correct'] = answer
-            
+
             test['questions'] = questions
             save_data(data)
             context.user_data.pop('editing_test', None)
             context.user_data.pop('editing_test_id', None)
             context.user_data.pop('test_editing_step', None)
             await update.message.reply_text(f"✅ Javoblar yangilandi!")
-            
+
         except Exception as e:
             logger.error(f"Javoblar yangilash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
-    
+
+
 
 
 async def save_test_immediately(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Testni darhol saqlash (vaqt belgilamasdan)"""
     user_id = update.effective_user.id
-    
+
     # Testni saqlash
     data = load_data()
     test_id = f"test_{len(data['tests']) + 1}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -435,7 +434,7 @@ async def save_test_immediately(update: Update, context: ContextTypes.DEFAULT_TY
         # Fayl kengaytmasini saqlash
         file_ext = os.path.splitext(file_name)[1] or '.txt'
         new_file_path = os.path.join(test_files_dir, f"{test_id}{file_ext}")
-        
+
         # Faylni qayta nomlash
         if os.path.exists(old_file_path):
             os.rename(old_file_path, new_file_path)
@@ -445,10 +444,10 @@ async def save_test_immediately(update: Update, context: ContextTypes.DEFAULT_TY
         test_data['file_name'] = file_name
     data['tests'][test_id] = test_data
     save_data(data)
-    
+
     test_name = context.user_data.get('test_name', 'Noma\'lum')
     test_questions = context.user_data.get('test_questions', [])
-    
+
     # Test post yaratish va yuborish
     # Bot username ni olish
     try:
@@ -456,16 +455,16 @@ async def save_test_immediately(update: Update, context: ContextTypes.DEFAULT_TY
         bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
     except:
         bot_username = "Test Bot"
-    
+
     post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
-    
+
     # Xabar yuborish
     await update.message.reply_text(
         post_text,
         parse_mode='HTML',
         reply_markup=reply_markup
     )
-    
+
     # Test yaratildi xabari
     await update.message.reply_text(
         f"✅ Test muvaffaqiyatli yaratildi!\n\n"
@@ -473,7 +472,7 @@ async def save_test_immediately(update: Update, context: ContextTypes.DEFAULT_TY
         f"Test nomi: {test_name}\n"
         f"Savollar soni: {len(test_questions)}"
     )
-    
+
     context.user_data.clear()
 
 
@@ -481,13 +480,13 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
     """Test yaratish jarayonini qayta ishlash"""
     if not context.user_data.get('creating_test'):
         return
-    
+
     if not update.message or not update.message.text:
         return
-    
+
     user_id = update.effective_user.id
     step = context.user_data.get('test_creation_step', 'name')
-    
+
     if step == 'name':
         # Test nomi kiritildi
         test_name = update.message.text.strip()
@@ -495,13 +494,13 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         # Test nomini saqlash va keyingi bosqichga o'tish
         context.user_data['test_name'] = test_name
         context.user_data['test_creation_step'] = 'file'
         await update.message.reply_text("📄 Test faylini yuboring:")
         return
-    
+
     elif step == 'text_answers':
         # 36-40 savollar uchun yozma javoblar kiritildi
         text_answers_input = update.message.text
@@ -509,18 +508,18 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         try:
             # Yozma javoblarni qatorlarga ajratish
             # Bo'sh qatorlar ham qabul qilinadi (5 ta qator bo'lishi kerak)
             lines = text_answers_input.split('\n')
-            
+
             # Faqat birinchi 5 ta qatorni olish
             text_answers = []
             for i in range(min(5, len(lines))):
                 line = lines[i].strip()
                 text_answers.append(line)
-            
+
             # Agar 5 ta qatordan kam bo'lsa, xatolik berish
             if len(text_answers) < 5:
                 await update.message.reply_text(
@@ -537,13 +536,13 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     f"ℹ️ Bo'sh qatorlar javob berilmagan degan ma'noni bildiradi."
                 )
                 return
-            
+
             # Bo'sh javoblarni tekshirish - barcha javoblar majburiy
             empty_questions = []
             for i, answer in enumerate(text_answers):
                 if not answer:  # Bo'sh qator
                     empty_questions.append(36 + i)
-            
+
             if empty_questions:
                 await update.message.reply_text(
                     f"❌ Barcha savollarga javob berish majburiy!\n\n"
@@ -552,10 +551,10 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     f"Iltimos, barcha 5 ta savol uchun javoblarni kiriting."
                 )
                 return
-            
+
             # Yozma javoblarni saqlash
             context.user_data['text_answers'] = text_answers
-            
+
             # 36-40 javoblarni saqlash va 41-savol uchun javoblarni so'rash
             context.user_data['test_creation_step'] = 'problem_41_answers'
             await update.message.reply_text(
@@ -571,11 +570,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
             )
             return
-        
+
         except Exception as e:
             logger.error(f"Yozma javoblar qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
+
     elif step == 'problem_41_answers':
         # 41-savol (masalaviy) uchun javoblar kiritildi
         problem_41_input = update.message.text
@@ -583,17 +582,17 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         try:
             # Javoblarni qatorlarga ajratish
             lines = problem_41_input.split('\n')
             problem_41_answers = []
-            
+
             for line in lines:
                 line = line.strip()
                 if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
                     problem_41_answers.append(line)
-            
+
             # Hech bo'lmaganda 1 ta javob bo'lishi kerak
             if len(problem_41_answers) == 0:
                 await update.message.reply_text(
@@ -601,10 +600,10 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     f"Qaytadan urinib ko'ring."
                 )
                 return
-            
+
             # 41-savol javoblarini saqlash
             context.user_data['problem_41_answers'] = problem_41_answers
-            
+
             # 42-savol uchun javoblarni so'rash
             context.user_data['test_creation_step'] = 'problem_42_answers'
             await update.message.reply_text(
@@ -618,11 +617,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
             )
             return
-        
+
         except Exception as e:
             logger.error(f"41-savol javoblarini qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
+
     elif step == 'problem_42_answers':
         # 42-savol (masalaviy) uchun javoblar kiritildi
         problem_42_input = update.message.text
@@ -630,17 +629,17 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         try:
             # Javoblarni qatorlarga ajratish
             lines = problem_42_input.split('\n')
             problem_42_answers = []
-            
+
             for line in lines:
                 line = line.strip()
                 if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
                     problem_42_answers.append(line)
-            
+
             # Hech bo'lmaganda 1 ta javob bo'lishi kerak
             if len(problem_42_answers) == 0:
                 await update.message.reply_text(
@@ -648,10 +647,10 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     f"Qaytadan urinib ko'ring."
                 )
                 return
-            
+
             # 42-savol javoblarini saqlash
             context.user_data['problem_42_answers'] = problem_42_answers
-            
+
             # 43-savol uchun javoblarni so'rash
             context.user_data['test_creation_step'] = 'problem_43_answers'
             await update.message.reply_text(
@@ -665,11 +664,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
             )
             return
-        
+
         except Exception as e:
             logger.error(f"42-savol javoblarini qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
+
     elif step == 'problem_43_answers':
         # 43-savol (masalaviy) uchun javoblar kiritildi
         problem_43_input = update.message.text
@@ -677,17 +676,17 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         try:
             # Javoblarni qatorlarga ajratish
             lines = problem_43_input.split('\n')
             problem_43_answers = []
-            
+
             for line in lines:
                 line = line.strip()
                 if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
                     problem_43_answers.append(line)
-            
+
             # Hech bo'lmaganda 1 ta javob bo'lishi kerak
             if len(problem_43_answers) == 0:
                 await update.message.reply_text(
@@ -695,14 +694,14 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     f"Qaytadan urinib ko'ring."
                 )
                 return
-            
+
             # 43-savol javoblarini saqlash
             context.user_data['problem_43_answers'] = problem_43_answers
-            
-            # Barcha javoblar to'plandi - testni yaratish
+
+            # Javoblarni saqlash va testni yaratish
             # Savollarni yaratish
             questions = []
-            
+
             # 1-35 savollar uchun ko'p tanlov savollarini yaratish
             mc_answers = context.user_data.get('mc_answers', [])
             for idx, answer in enumerate(mc_answers):
@@ -720,7 +719,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                         'options': options,
                         'correct': answer
                     })
-            
+
             # 36-40 savollar uchun yozma javob savollarini yaratish
             text_answers = context.user_data.get('text_answers', [])
             for idx, answer in enumerate(text_answers):
@@ -731,7 +730,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     'options': [],
                     'correct': answer
                 })
-            
+
             # 41-savol (masalaviy) uchun javoblarni qo'shish
             problem_41_answers = context.user_data.get('problem_41_answers', [])
             questions.append({
@@ -741,8 +740,9 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 'correct': problem_41_answers,  # List of answers
                 'sub_question_count': len(problem_41_answers)
             })
-            
+
             # 42-savol (masalaviy) uchun javoblarni qo'shish
+            problem_42_answers = context.user_data.get('problem_42_answers', [])
             questions.append({
                 'question': f"Savol 42 (masalaviy)",
                 'type': 'problem',
@@ -750,7 +750,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 'correct': problem_42_answers,
                 'sub_question_count': len(problem_42_answers)
             })
-            
+
             # 43-savol (masalaviy) uchun javoblarni qo'shish
             questions.append({
                 'question': f"Savol 43 (masalaviy)",
@@ -759,18 +759,18 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 'correct': problem_43_answers,
                 'sub_question_count': len(problem_43_answers)
             })
-            
-            # Javoblarni saqlash va testni yaratish
+
+            # Barcha javoblar to'plandi - testni yaratish
             context.user_data['test_questions'] = questions
-            
+
             # Test yaratish
             await save_test_immediately(update, context)
             return
-        
+
         except Exception as e:
             logger.error(f"43-savol javoblarini qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
+
     elif step == 'answers':
         # 1-35 savollar uchun javoblar kiritildi
         answers_text = update.message.text.strip()
@@ -778,11 +778,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data.clear()
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
-        
+
         try:
             # Javoblarni qayta ishlash
             mc_answers = {}  # {question_num: answer}
-            
+
             # Raqam + harf kombinatsiyalarini topish (1a, 2b, 10c, ...)
             pattern = r'(\d+)([a-fA-F])'
             matches = re.findall(pattern, answers_text)
@@ -790,7 +790,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 q_num = int(num_str)
                 if q_num <= 35:
                     mc_answers[q_num] = letter.lower()
-            
+
             # Agar raqam+harf formatida yetarli javob bo'lmasa, eski formatni sinab ko'rish
             if len(mc_answers) < 35:
                 # Eski format: faqat harflar (abc...)
@@ -805,7 +805,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     else:
                         if char in 'abcd':
                             answers.append(char)
-                
+
                 if len(answers) == 35:
                     # Eski format ishladi
                     mc_answers = {i+1: answers[i] for i in range(len(answers))}
@@ -818,7 +818,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                         f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
                     )
                     return
-            
+
             # 1-35 savollar uchun javoblarni listga o'tkazish
             mc_answers_list = []
             for q_num in range(1, 36):
@@ -831,11 +831,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                         f"Format: 1a2b3c4d... yoki abc... (35 ta javob)"
                     )
                     return
-            
+
             # Javoblarni saqlash va 36-40 savollar uchun javoblarni so'rash
             context.user_data['mc_answers'] = mc_answers_list
             context.user_data['test_creation_step'] = 'text_answers'
-            
+
             await update.message.reply_text(
                 f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
                 f"📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
@@ -849,11 +849,11 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ Barcha savollarga javob berish majburiy!"
             )
             return
-        
+
         except Exception as e:
             logger.error(f"1-35 javoblar qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
-    
+
 
 
 async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -861,51 +861,51 @@ async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Test yaratish yoki tahrirlash rejimida bo'lishi kerak
     is_creating = context.user_data.get('creating_test')
     is_editing = context.user_data.get('editing_test')
-    
+
     if not is_creating and not is_editing:
         return
-    
+
     step = context.user_data.get('test_creation_step') or context.user_data.get('test_editing_step')
     if step != 'file':
         return
-    
+
     try:
         user_id = update.effective_user.id
-        
+
         # Faylni yuklash
         document = update.message.document
         if not document:
             await update.message.reply_text("❌ Fayl topilmadi. Qayta yuboring.")
             return
-        
+
         file = await context.bot.get_file(document.file_id)
-        
+
         # Fayl mazmunini o'qish
         file_content = await file.download_as_bytearray()
         text_content = file_content.decode('utf-8', errors='ignore')
-        
+
         # Test faylini saqlash (savollarni avtomatik ajratmaslik)
         # Foydalanuvchi o'zi test faylini yuboradi, savollar sonini avtomatik aniqlashga harakat qilmaymiz
         # Faylni saqlash
         test_files_dir = "test_files"
         os.makedirs(test_files_dir, exist_ok=True)
-        
+
         # Vaqtinchalik fayl nomi
         temp_file_name = f"temp_{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         file_ext = os.path.splitext(document.file_name or 'test.txt')[1] or '.txt'
         temp_file_path = os.path.join(test_files_dir, f"{temp_file_name}{file_ext}")
-        
+
         # Faylni diskga saqlash
         with open(temp_file_path, 'wb') as f:
             f.write(file_content)
-        
+
         # Fayl ma'lumotlarini saqlash
         context.user_data['test_file_path'] = temp_file_path
         context.user_data['test_file_name'] = document.file_name or 'test.txt'
-        
+
         # Savollarni avtomatik ajratmaslik - foydalanuvchi javoblarni kiritadi
         # Savollar sonini avtomatik aniqlashga harakat qilmaymiz
-        
+
         # Agar tahrirlash rejimida bo'lsa
         if is_editing:
             test_id = context.user_data.get('editing_test_id')
@@ -918,46 +918,46 @@ async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         os.remove(old_file_path)
                     except:
                         pass
-                
+
                 # Yangi faylni saqlash
                 test_files_dir = "test_files"
                 os.makedirs(test_files_dir, exist_ok=True)
                 file_name = document.file_name or "test.txt"
                 file_ext = os.path.splitext(file_name)[1] or '.txt'
                 new_file_path = os.path.join(test_files_dir, f"{test_id}{file_ext}")
-                
+
                 # Faylni diskga saqlash
                 with open(new_file_path, 'wb') as f:
                     f.write(file_content)
-                
+
                 # Testni yangilash (savollarni o'zgartirmaslik, faqat faylni yangilash)
                 data['tests'][test_id]['file_path'] = new_file_path
                 data['tests'][test_id]['file_name'] = file_name
                 save_data(data)
-                
+
                 context.user_data.pop('editing_test', None)
                 context.user_data.pop('editing_test_id', None)
                 context.user_data.pop('test_editing_step', None)
                 await update.message.reply_text("✅ Test fayli yangilandi!\n\nJavoblarni yangilash uchun testni qayta tahrirlang.")
                 return
-        
+
         # Test yaratish rejimi
         # Faylni doimiy saqlash
         test_files_dir = "test_files"
         os.makedirs(test_files_dir, exist_ok=True)
-        
+
         file_name = document.file_name or "test.txt"
         # Fayl nomini test ID bilan biriktirish uchun vaqtinchalik saqlash
         temp_file_path = os.path.join(test_files_dir, f"temp_{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file_name}")
-        
+
         # Faylni diskka yuklash
         await file.download_to_drive(temp_file_path)
-        
+
         # Fayl yo'lini saqlash
         context.user_data['test_file_path'] = temp_file_path
         context.user_data['test_file_name'] = file_name
         context.user_data['test_creation_step'] = 'answers'
-        
+
         # Javoblar kiritishni so'rash (1-35 savollar uchun ko'p tanlov, 36-40 uchun yozma javob)
         await update.message.reply_text(
             "✅ Fayl yuklandi!\n\n"
@@ -967,7 +967,7 @@ async def process_test_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ℹ️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!\n\n"
             "📝 Keyin 36-40 savollar uchun yozma javoblar so'raladi."
         )
-        
+
     except Exception as e:
         logger.error(f"Fayl qayta ishlash xatosi: {e}")
         await update.message.reply_text(f"❌ Xatolik: {str(e)}")
@@ -977,7 +977,7 @@ async def list_tests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Testlar ro'yxati"""
     if not await check_subscription(update, context):
         return
-    
+
     # Ism va familya tekshiruvi
     if not await check_user_name(update, context):
         await update.message.reply_text(
@@ -985,21 +985,21 @@ async def list_tests(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Iltimos, /start ni bosing va ism va familyangizni kiriting."
         )
         return
-    
+
     data = load_data()
     if not data['tests']:
         await update.message.reply_text("❌ Hozircha testlar mavjud emas.")
         return
-    
+
     user_id = update.effective_user.id
     is_boss = user_id == BOSS_ID
     is_admin = user_id in data["admins"]
-    
+
     keyboard = []
     for test_id, test_data in data['tests'].items():
         # Test yaratgan foydalanuvchi yoki admin/boss bo'lsa, tahrirlash tugmasi qo'shish
         can_edit = (is_boss or is_admin) and test_data.get('created_by') == user_id
-        
+
         if can_edit:
             # Test nomi va tahrirlash tugmasi
             keyboard.append([
@@ -1018,7 +1018,7 @@ async def list_tests(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 test_data['name'],
                 callback_data=f"start_test_{test_id}"
             )])
-    
+
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("📋 Mavjud testlar:", reply_markup=reply_markup)
 
@@ -1027,25 +1027,25 @@ async def edit_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id:
     """Testni tahrirlash"""
     user_id = update.effective_user.id
     data = load_data()
-    
+
     if test_id not in data['tests']:
         if update.callback_query:
             await update.callback_query.answer("❌ Test topilmadi!")
         return
-    
+
     test = data['tests'][test_id]
-    
+
     # Faqat test yaratgan foydalanuvchi yoki boss tahrirlashi mumkin
     if user_id != BOSS_ID and test.get('created_by') != user_id:
         if update.callback_query:
             await update.callback_query.answer("❌ Bu testni tahrirlash huquqingiz yo'q!")
         return
-    
+
     # Test tahrirlash rejimini boshlash
     context.user_data['editing_test'] = True
     context.user_data['editing_test_id'] = test_id
     context.user_data['test_editing_step'] = 'name'
-    
+
     keyboard = [
         [InlineKeyboardButton("📝 Test nomini o'zgartirish", callback_data=f"edit_name_{test_id}")],
         [InlineKeyboardButton("📄 Test faylini qayta yuklash", callback_data=f"edit_file_{test_id}")],
@@ -1055,11 +1055,11 @@ async def edit_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id:
         [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_edit")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     text = f"✏️ Test tahrirlash: {test['name']}\n\n"
     text += f"Savollar soni: {len(test['questions'])}\n\n"
     text += "Nimani tahrirlamoqchisiz?"
-    
+
     if update.callback_query:
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
     else:
@@ -1070,7 +1070,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
     """Testni boshlash"""
     if not await check_subscription(update, context):
         return
-    
+
     data = load_data()
     if test_id not in data['tests']:
         if update.callback_query:
@@ -1078,10 +1078,10 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
         else:
             await update.message.reply_text("❌ Test topilmadi!")
         return
-    
+
     test = data['tests'][test_id]
     user_id = update.effective_user.id
-    
+
     # Foydalanuvchi bu testni allaqachon ishlaganligini tekshirish
     user_results = data.get('user_results', {})
     for r_id, result in user_results.items():
@@ -1093,7 +1093,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
             else:
                 await update.message.reply_text(error_text)
             return
-    
+
     # Testni boshlash
     context.user_data[f'test_{test_id}'] = {
         'test_id': test_id,
@@ -1101,7 +1101,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
         'started_at': datetime.now().isoformat(),
         'waiting_answers': True
     }
-    
+
     # Agar test fayli mavjud bo'lsa, uni yuborish
     if 'file_path' in test and os.path.exists(test['file_path']):
         try:
@@ -1116,7 +1116,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                     )
                 # 36-40 savollar mavjudligini tekshirish
                 has_text_questions = any(
-                    q.get('type') == 'text_answer' 
+                    q.get('type') == 'text_answer'
                     for q in test['questions']
                 )
                 instruction_text = "✅ Test fayli yuborildi!\n\n"
@@ -1135,7 +1135,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                     )
                 # 36-40 savollar mavjudligini tekshirish
                 has_text_questions = any(
-                    q.get('type') == 'text_answer' 
+                    q.get('type') == 'text_answer'
                     for q in test['questions']
                 )
                 instruction_text = "✅ Test fayli yuborildi!\n\n"
@@ -1165,7 +1165,7 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                 text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
             else:
                 text += "Javoblarni kiriting: 1a2b3c4d..."
-            
+
             if update.callback_query:
                 await update.callback_query.edit_message_text(text)
             else:
@@ -1184,13 +1184,13 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
                     letter = chr(97 + opt_idx)  # a, b, c, d
                     text += f"   {letter}) {option}\n"
             text += "\n"
-        
+
         if has_text_questions:
             text += "📝 1-35 savollar uchun javoblarni kiriting: 1a2b3c4d...\n"
             text += "⚠️ 36-40 savollar uchun keyinroq yozma javoblar so'raladi."
         else:
             text += "Javoblarni kiriting: 1a2b3c4d..."
-        
+
         if update.callback_query:
             await update.callback_query.edit_message_text(text)
         else:
@@ -1201,7 +1201,7 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
     """Test javoblarini qayta ishlash (1a2b3c4d... formatida va yozma javoblar)"""
     if not update.message or not update.message.text:
         return False
-    
+
     # Qaysi test uchun javob kiritilayotganini topish
     test_data_key = None
     test_id = None
@@ -1213,40 +1213,40 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
                 test_data_key = key
                 test_id = test_data.get('test_id')
                 break
-    
+
     if not test_data_key or not test_id:
         return False  # Test ishlash rejimida emas
-    
+
     user_id = update.effective_user.id
     text = update.message.text.strip()
-    
+
     data = load_data()
     if test_id not in data['tests']:
         await update.message.reply_text("❌ Test topilmadi!")
         return False
-    
+
     test = data['tests'][test_id]
-    
+
     # Yozma javoblar kiritilayotganini tekshirish (36-40 savollar uchun)
     waiting_text_answers = context.user_data[test_data_key].get('waiting_text_answers', False)
-    
+
     if waiting_text_answers:
         # Yozma javoblar kiritilmoqda (36-40 savollar)
         # Javoblarni qatorlarga ajratish (har bir qator bitta savol uchun)
         # Qavs ichidagi matn alohida javob deb hisoblanmaydi
         lines = text.split('\n')
         text_answers = []
-        
+
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             # Qavs ichidagi matn javobning bir qismi bo'lib qoladi, alohida javob emas
             text_answers.append(line)
-        
+
         # 36-40 savollar uchun 5 ta javob kerak
         text_question_indices = [35, 36, 37, 38, 39]  # 0-based index
-        
+
         if len(text_answers) != len(text_question_indices):
             await update.message.reply_text(
                 f"❌ Yozma javoblar soni noto'g'ri!\n\n"
@@ -1262,28 +1262,28 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"Javob 40-savolga"
             )
             return True
-        
+
         # Yozma javoblarni saqlash
         for idx, answer in enumerate(text_answers):
             question_idx = text_question_indices[idx]
             context.user_data[test_data_key]['answers'][str(question_idx)] = answer
-        
+
         # Testni yakunlash
         context.user_data[test_data_key]['waiting_answers'] = False
         context.user_data[test_data_key]['waiting_text_answers'] = False
         await finish_test(update, context, test_id)
         return True
-    
+
     else:
         # Ko'p tanlov javoblari kiritilmoqda (1-35 savollar)
         text_lower = text.lower()
-        
+
         # 36-40 savollar mavjudligini tekshirish
         has_text_questions = any(
-            q.get('type') == 'text_answer' 
+            q.get('type') == 'text_answer'
             for q in test['questions']
         )
-        
+
         # Javoblarni ajratish (1a2b3c4d... yoki abc...)
         # Faqat 1-35 savollar uchun (0-based: 0-34)
         answers = []
@@ -1291,11 +1291,11 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
             char_lower = char.lower()
             # Hozirgi savol indexini aniqlash (mavjud javoblar soni)
             question_idx = len(answers)
-            
+
             # Faqat 1-35 savollar uchun javob qabul qilamiz (0-based: 0-34)
             if question_idx >= 35:
                 break
-            
+
             # 33, 34, 35-savollar (idx 32, 33, 34) uchun e va f ham qabul qilamiz
             if question_idx in [32, 33, 34]:  # 33, 34, 35-savollar
                 if char_lower in 'abcdef':
@@ -1304,7 +1304,7 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Boshqa savollar uchun faqat a-d qabul qilamiz
                 if char_lower in 'abcd':
                     answers.append(char_lower)
-        
+
         # 1-35 savollar uchun 35 ta javob kerak
         required_mc_answers = 35
         if len(answers) != required_mc_answers:
@@ -1316,11 +1316,11 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
             )
             return True
-        
+
         # Ko'p tanlov javoblarini saqlash
         for idx, answer in enumerate(answers):
             context.user_data[test_data_key]['answers'][str(idx)] = answer
-        
+
         # Agar 36-40 savollar mavjud bo'lsa, yozma javoblarni so'rash
         if has_text_questions:
             context.user_data[test_data_key]['waiting_text_answers'] = True
@@ -1349,20 +1349,20 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
     test_data_key = f'test_{test_id}'
     if test_data_key not in context.user_data:
         return
-    
+
     data = load_data()
     test = data['tests'][test_id]
     user_answers = context.user_data[test_data_key]['answers']
     user_id = update.effective_user.id
-    
+
     # To'g'ri javoblar soni
     correct = 0
     total = len(test['questions'])
     results = []
-    
+
     for idx, question in enumerate(test['questions']):
         user_answer = user_answers.get(str(idx), '')
-        
+
         # Yozma javoblar uchun avtomatik baholash qilinmaydi (qo'lda tekshirish kerak)
         if question.get('type') == 'text_answer':
             # Yozma javoblar uchun is_correct None yoki False bo'ladi (qo'lda tekshirish uchun)
@@ -1385,7 +1385,7 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
                 'correct_answer': question['correct'],
                 'is_correct': is_correct
             })
-    
+
     # Natijalarni saqlash (lekin hozir ko'rsatmaymiz)
     result_id = f"result_{user_id}_{test_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     if 'user_results' not in data:
@@ -1401,7 +1401,7 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
         'completed_at': datetime.now().isoformat()
     }
     save_data(data)
-    
+
     # 0-1 Matrix yaratish va yangilash
     from utils import generate_response_matrix
     matrix_file_path, _ = generate_response_matrix(test_id, data)
@@ -1411,16 +1411,16 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
             test['matrix_file'] = matrix_file_path
             data['tests'][test_id] = test
             save_data(data)
-    
+
     # Faqat "javobingiz qabul qilindi" deb yuborish
     # Natijalar testni natijalash tugmasi bosilguncha ko'rsatilmaydi
     text = "✅ Javobingiz qabul qilindi!\n\nTest natijalari o'qituvchi tomonidan e'lon qilingandan keyin ko'rsatiladi."
-    
+
     if update.callback_query:
         await update.callback_query.edit_message_text(text)
     else:
         await update.message.reply_text(text)
-    
+
     # User data tozalash
     del context.user_data[test_data_key]
 
@@ -1429,34 +1429,34 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
     """Testni natijalash - barcha natijalarni to'plash va o'qituvchiga yuborish"""
     user_id = update.effective_user.id
     data = load_data()
-    
+
     if test_id not in data['tests']:
         if update.callback_query:
             await update.callback_query.answer("❌ Test topilmadi!")
         return
-    
+
     test = data['tests'][test_id]
-    
+
     # Faqat test yaratgan foydalanuvchi yoki boss natijalashi mumkin
     if user_id != BOSS_ID and test.get('created_by') != user_id:
         if update.callback_query:
             await update.callback_query.answer("❌ Bu testni natijalash huquqingiz yo'q!")
         return
-    
+
     # Barcha foydalanuvchi natijalarini to'plash
     all_results = [
         r for r_id, r in data.get('user_results', {}).items()
         if r.get('test_id') == test_id
     ]
-    
+
     if not all_results:
         if update.callback_query:
             await update.callback_query.answer("❌ Bu test uchun hali natijalar yo'q!")
         return
-    
+
     # Natijalarni tayyorlash
     teacher_id = test.get('created_by')
-    
+
     # Barcha natijalarni to'plash va tartiblash
     finalized_results = []
     for result in all_results:
@@ -1467,28 +1467,28 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
             'percentage': result['percentage'],
             'completed_at': result['completed_at']
         })
-    
+
     # Foiz bo'yicha tartiblash (yuqoridan pastga)
     finalized_results.sort(key=lambda x: x.get('percentage', 0), reverse=True)
-    
+
     # Umumiy statistika
     total_students = len(finalized_results)
     avg_percentage = sum(r['percentage'] for r in finalized_results) / total_students if total_students > 0 else 0
-    
+
     # O'qituvchiga natijalar xabari
     text = f"📊 Test natijalari: {test['name']}\n\n"
     text += f"📈 Umumiy statistika:\n"
     text += f"   Jami ishtirokchilar: {total_students}\n"
     text += f"   O'rtacha foiz: {avg_percentage:.1f}%\n\n"
     text += f"📋 Natijalar (foiz bo'yicha):\n\n"
-    
+
     for idx, result in enumerate(finalized_results[:20], 1):  # Top 20
         text += f"{idx}. Talabgor: {result['user_id']}\n"
         text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%)\n\n"
-    
+
     if total_students > 20:
         text += f"... va yana {total_students - 20} ta natija\n"
-    
+
     # PDF yaratish (barcha natijalar uchun)
     try:
         html_content = f"""
@@ -1525,7 +1525,7 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                     <th>Vaqt</th>
                 </tr>
         """
-        
+
         for idx, result in enumerate(finalized_results, 1):
             completed_time = datetime.fromisoformat(result['completed_at']).strftime('%Y-%m-%d %H:%M')
             html_content += f"""
@@ -1537,13 +1537,13 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                     <td>{completed_time}</td>
                 </tr>
             """
-        
+
         html_content += """
             </table>
         </body>
         </html>
         """
-        
+
         # Fallback matnli ro'yxat (reportlab uchun)
         fallback_lines = [
             f"Test natijalari: {test['name']}",
@@ -1561,7 +1561,7 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                 f"{result['percentage']:.1f}% | "
                 f"Vaqt: {datetime.fromisoformat(result['completed_at']).strftime('%Y-%m-%d %H:%M')}"
             )
-        
+
         # PDF yaratish
         pdf_file = generate_pdf(
             f"final_{test_id}",
@@ -1572,13 +1572,13 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                 'fallback_lines': fallback_lines
             }
         )
-        
+
         # O'qituvchiga yuborish
         if update.callback_query:
             await update.callback_query.edit_message_text(text)
         else:
             await update.message.reply_text(text)
-        
+
         if pdf_file:
             if update.callback_query:
                 await update.callback_query.message.reply_document(
@@ -1590,24 +1590,24 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
                     document=pdf_file,
                     filename=f"test_final_results_{test_id}.pdf"
                 )
-        
+
         # Testni testlar ro'yxatidan olib tashlash
         del data['tests'][test_id]
         save_data(data)
-        
+
         # Test faylini o'chirish (ixtiyoriy)
         if 'file_path' in test and os.path.exists(test['file_path']):
             try:
                 os.remove(test['file_path'])
             except:
                 pass
-        
+
         success_text = f"✅ Test muvaffaqiyatli natijalandi va testlar ro'yxatidan olib tashlandi!"
         if update.callback_query:
             await update.callback_query.message.reply_text(success_text)
         else:
             await update.message.reply_text(success_text)
-        
+
     except Exception as e:
         logger.error(f"Test natijalash xatosi: {e}")
         error_text = f"❌ Xatolik: {str(e)}"
@@ -1621,31 +1621,31 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     """0-1 Matrix yuklab olish"""
     user_id = update.effective_user.id
     data = load_data()
-    
+
     if test_id not in data['tests']:
         if update.callback_query:
             await update.callback_query.answer("❌ Test topilmadi!")
         return
-    
+
     test = data['tests'][test_id]
-    
+
     # Faqat test yaratgan foydalanuvchi yoki boss yuklab olishi mumkin
     if user_id != BOSS_ID and test.get('created_by') != user_id:
         if update.callback_query:
             await update.callback_query.answer("❌ Bu testni matrixini yuklab olish huquqingiz yo'q!")
         return
-    
+
     # Matrix yaratish/yangilash
     from utils import generate_response_matrix
     matrix_file_path, matrix_text = generate_response_matrix(test_id, data)
-    
+
     if not matrix_file_path or not matrix_text:
         if update.callback_query:
             await update.callback_query.answer("❌ Matrix yaratib bo'lmadi yoki hali natijalar yo'q!", show_alert=True)
         else:
             await update.message.reply_text("❌ Matrix yaratib bo'lmadi yoki hali natijalar yo'q!")
         return
-    
+
     # Matrix faylini yuborish
     try:
         with open(matrix_file_path, 'rb') as f:
@@ -1687,7 +1687,7 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Foydalanuvchi natijalari"""
     if not await check_subscription(update, context):
         return
-    
+
     # Ism va familya tekshiruvi
     if not await check_user_name(update, context):
         await update.message.reply_text(
@@ -1695,10 +1695,10 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Iltimos, /start ni bosing va ism va familyangizni kiriting."
         )
         return
-    
+
     user_id = update.effective_user.id
     data = load_data()
-    
+
     # Faqat natijalangan testlar natijalarini ko'rsatish
     # Test natijalangan bo'lsa, u data['tests'] dan o'chirilgan bo'ladi
     user_results = []
@@ -1708,16 +1708,16 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Agar test hali mavjud bo'lsa (natijalanmagan), natijalarni ko'rsatmaymiz
             if test_id not in data.get('tests', {}):
                 user_results.append(r)
-    
+
     if not user_results:
         await update.message.reply_text("❌ Sizda hali test natijalari yo'q yoki testlar hali natijalanmagan.")
         return
-    
+
     text = "📊 Mening natijalarim:\n\n"
     for result in sorted(user_results, key=lambda x: x['completed_at'], reverse=True)[:10]:
         text += f"📝 {result['test_name']}\n"
         text += f"   {result['correct']}/{result['total']} ({result['percentage']:.1f}%)\n\n"
-    
+
     await update.message.reply_text(text)
 
 
@@ -1725,9 +1725,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback query handler"""
     query = update.callback_query
     await query.answer()
-    
+
     data = query.data
-    
+
     # Admin boshqaruvi
     if data == "add_admin":
         await query.edit_message_text("Admin ID ni yuboring:")
@@ -1743,7 +1743,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             text = "❌ Adminlar mavjud emas."
         await query.edit_message_text(text)
-    
+
     # Kanal boshqaruvi
     elif data == "add_channel":
         await query.edit_message_text("Kanal username yoki ID ni yuboring (masalan: @channel yoki -1001234567890):")
@@ -1759,12 +1759,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             text = "❌ Majburiy kanallar mavjud emas."
         await query.edit_message_text(text)
-    
+
     # Test boshlash
     elif data.startswith("start_test_"):
         test_id = data.replace("start_test_", "")
         await start_test(update, context, test_id)
-    
+
     # Postni ko'rish (ulashish)
     elif data.startswith("view_post_"):
         test_id = data.replace("view_post_", "")
@@ -1776,7 +1776,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 bot_username = f"@{bot_info.username}" if bot_info.username else "Test Bot"
             except:
                 bot_username = "Test Bot"
-            
+
             post_text, reply_markup = generate_test_post(test_data, test_id, bot_username)
             # Postni yangi xabar sifatida yuborish (nusxalab yuborish uchun)
             await query.answer("📢 Post yuborilmoqda...")
@@ -1787,7 +1787,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             await query.answer("❌ Test topilmadi!", show_alert=True)
-    
+
     # Barcha testlar ro'yxati
     elif data == "list_all_tests":
         await query.answer("📋 Testlar ro'yxati yuborilmoqda...")
@@ -1797,15 +1797,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not data_file['tests']:
             await query.message.reply_text("❌ Hozircha testlar mavjud emas.")
             return
-        
+
         user_id = query.from_user.id
         is_boss = user_id == BOSS_ID
         is_admin = user_id in data_file.get("admins", [])
-        
+
         keyboard = []
         for test_id, test_data in data_file['tests'].items():
             can_edit = (is_boss or is_admin) and test_data.get('created_by') == user_id
-            
+
             if can_edit:
                 keyboard.append([
                     InlineKeyboardButton(
@@ -1821,19 +1821,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         callback_data=f"start_test_{test_id}"
                     )
                 ])
-        
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_text(
             "📋 <b>Mavjud testlar:</b>\n\nTestni tanlang:",
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
+
     # Test tahrirlash
     elif data.startswith("edit_test_"):
         test_id = data.replace("edit_test_", "")
         await edit_test(update, context, test_id)
-    
+
     # Test tahrirlash bosqichlari
     elif data.startswith("edit_name_"):
         test_id = data.replace("edit_name_", "")
@@ -1841,14 +1841,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['editing_test_id'] = test_id
         context.user_data['test_editing_step'] = 'name'
         await query.edit_message_text("Yangi test nomini kiriting:")
-    
+
     elif data.startswith("edit_file_"):
         test_id = data.replace("edit_file_", "")
         context.user_data['editing_test'] = True
         context.user_data['editing_test_id'] = test_id
         context.user_data['test_editing_step'] = 'file'
         await query.edit_message_text("Yangi test faylini yuboring:")
-    
+
     elif data.startswith("edit_answers_"):
         test_id = data.replace("edit_answers_", "")
         data_file = load_data()
@@ -1861,15 +1861,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"Javoblarni kiriting: 1a2b3c4d...\n\nSavollar soni: {len(test['questions'])}")
         else:
             await query.answer("❌ Test topilmadi!")
-    
+
     elif data.startswith("finalize_test_"):
         test_id = data.replace("finalize_test_", "")
         await finalize_test(update, context, test_id)
-    
+
     elif data.startswith("download_matrix_"):
         test_id = data.replace("download_matrix_", "")
         await download_matrix(update, context, test_id)
-    
+
     elif data == "cancel_edit":
         context.user_data.pop('editing_test', None)
         context.user_data.pop('editing_test_id', None)
@@ -1881,7 +1881,7 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
     """Admin va kanal qo'shish/olib tashlash"""
     if update.effective_user.id != BOSS_ID:
         return
-    
+
     # Agar hech qanday operatsiya kutilayotgan bo'lmasa, hech narsa qilmaymiz
     if not any([
         context.user_data.get('adding_admin'),
@@ -1890,10 +1890,10 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
         context.user_data.get('removing_channel')
     ]):
         return
-    
+
     text = update.message.text.strip()
     data = load_data()
-    
+
     # Admin qo'shish
     if context.user_data.get('adding_admin'):
         try:
@@ -1907,7 +1907,7 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
             context.user_data['adding_admin'] = False
         except ValueError:
             await update.message.reply_text("❌ Noto'g'ri ID format. Faqat raqam kiriting.")
-    
+
     # Admin olib tashlash
     elif context.user_data.get('removing_admin'):
         try:
@@ -1921,7 +1921,7 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
             context.user_data['removing_admin'] = False
         except ValueError:
             await update.message.reply_text("❌ Noto'g'ri ID format. Faqat raqam kiriting.")
-    
+
     # Kanal qo'shish
     elif context.user_data.get('adding_channel'):
         channel = text.replace('@', '').strip()
@@ -1932,7 +1932,7 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
         else:
             await update.message.reply_text(f"⚠️ Bu kanal allaqachon mavjud.")
         context.user_data['adding_channel'] = False
-    
+
     # Kanal olib tashlash
     elif context.user_data.get('removing_channel'):
         channel = text.replace('@', '').strip()
