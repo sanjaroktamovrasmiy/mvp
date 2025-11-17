@@ -56,7 +56,14 @@ def main():
     application.add_handler(CommandHandler("tests", list_tests))
     application.add_handler(CommandHandler("myresults", my_results))
     application.add_handler(CommandHandler("rasch", rasch_evaluation))
-    application.add_handler(CommandHandler("cancel", lambda u, c: c.user_data.clear()))
+    
+    # Cancel handler - async lambda
+    async def cancel_handler(update, context):
+        context.user_data.clear()
+        if update.message:
+            await update.message.reply_text("❌ Jarayon bekor qilindi.")
+    
+    application.add_handler(CommandHandler("cancel", cancel_handler))
     
     # Callback handler
     application.add_handler(CallbackQueryHandler(callback_handler))
