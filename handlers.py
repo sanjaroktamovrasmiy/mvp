@@ -556,14 +556,157 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             # Yozma javoblarni saqlash
             context.user_data['text_answers'] = text_answers
             
+            # 36-40 javoblarni saqlash va 41-savol uchun javoblarni so'rash
+            context.user_data['test_creation_step'] = 'problem_41_answers'
+            await update.message.reply_text(
+                f"✅ 36-40 savollar uchun javoblar qabul qilindi!\n\n"
+                f"📝 Endi 41-savol (masalaviy savol) uchun javoblarni kiriting:\n\n"
+                f"⚠️ Har bir kichik savol uchun alohida qatorda javob yozing:\n\n"
+                f"Masalan:\n"
+                f"147782\n"
+                f"H20\n"
+                f"H2o\n"
+                f"Na2\n"
+                f"Ejeh\n\n"
+                f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
+            )
+            return
+        
+        except Exception as e:
+            logger.error(f"Yozma javoblar qayta ishlash xatosi: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)}")
+    
+    elif step == 'problem_41_answers':
+        # 41-savol (masalaviy) uchun javoblar kiritildi
+        problem_41_input = update.message.text
+        if problem_41_input.strip() == '/cancel':
+            context.user_data.clear()
+            await update.message.reply_text("❌ Test yaratish bekor qilindi.")
+            return
+        
+        try:
+            # Javoblarni qatorlarga ajratish
+            lines = problem_41_input.split('\n')
+            problem_41_answers = []
+            
+            for line in lines:
+                line = line.strip()
+                if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
+                    problem_41_answers.append(line)
+            
+            # Hech bo'lmaganda 1 ta javob bo'lishi kerak
+            if len(problem_41_answers) == 0:
+                await update.message.reply_text(
+                    f"❌ 41-savol uchun hech bo'lmaganda 1 ta javob kiritish kerak!\n\n"
+                    f"Qaytadan urinib ko'ring."
+                )
+                return
+            
+            # 41-savol javoblarini saqlash
+            context.user_data['problem_41_answers'] = problem_41_answers
+            
+            # 42-savol uchun javoblarni so'rash
+            context.user_data['test_creation_step'] = 'problem_42_answers'
+            await update.message.reply_text(
+                f"✅ 41-savol uchun {len(problem_41_answers)} ta javob qabul qilindi!\n\n"
+                f"📝 Endi 42-savol (masalaviy savol) uchun javoblarni kiriting:\n\n"
+                f"⚠️ Har bir kichik savol uchun alohida qatorda javob yozing:\n\n"
+                f"Masalan:\n"
+                f"javob1\n"
+                f"javob2\n"
+                f"javob3\n\n"
+                f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
+            )
+            return
+        
+        except Exception as e:
+            logger.error(f"41-savol javoblarini qayta ishlash xatosi: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)}")
+    
+    elif step == 'problem_42_answers':
+        # 42-savol (masalaviy) uchun javoblar kiritildi
+        problem_42_input = update.message.text
+        if problem_42_input.strip() == '/cancel':
+            context.user_data.clear()
+            await update.message.reply_text("❌ Test yaratish bekor qilindi.")
+            return
+        
+        try:
+            # Javoblarni qatorlarga ajratish
+            lines = problem_42_input.split('\n')
+            problem_42_answers = []
+            
+            for line in lines:
+                line = line.strip()
+                if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
+                    problem_42_answers.append(line)
+            
+            # Hech bo'lmaganda 1 ta javob bo'lishi kerak
+            if len(problem_42_answers) == 0:
+                await update.message.reply_text(
+                    f"❌ 42-savol uchun hech bo'lmaganda 1 ta javob kiritish kerak!\n\n"
+                    f"Qaytadan urinib ko'ring."
+                )
+                return
+            
+            # 42-savol javoblarini saqlash
+            context.user_data['problem_42_answers'] = problem_42_answers
+            
+            # 43-savol uchun javoblarni so'rash
+            context.user_data['test_creation_step'] = 'problem_43_answers'
+            await update.message.reply_text(
+                f"✅ 42-savol uchun {len(problem_42_answers)} ta javob qabul qilindi!\n\n"
+                f"📝 Endi 43-savol (masalaviy savol) uchun javoblarni kiriting:\n\n"
+                f"⚠️ Har bir kichik savol uchun alohida qatorda javob yozing:\n\n"
+                f"Masalan:\n"
+                f"javob1\n"
+                f"javob2\n"
+                f"javob3\n\n"
+                f"⚠️ Barcha javoblarni majburiy ravishda kiriting!"
+            )
+            return
+        
+        except Exception as e:
+            logger.error(f"42-savol javoblarini qayta ishlash xatosi: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)}")
+    
+    elif step == 'problem_43_answers':
+        # 43-savol (masalaviy) uchun javoblar kiritildi
+        problem_43_input = update.message.text
+        if problem_43_input.strip() == '/cancel':
+            context.user_data.clear()
+            await update.message.reply_text("❌ Test yaratish bekor qilindi.")
+            return
+        
+        try:
+            # Javoblarni qatorlarga ajratish
+            lines = problem_43_input.split('\n')
+            problem_43_answers = []
+            
+            for line in lines:
+                line = line.strip()
+                if line:  # Faqat bo'sh bo'lmagan qatorlarni olish
+                    problem_43_answers.append(line)
+            
+            # Hech bo'lmaganda 1 ta javob bo'lishi kerak
+            if len(problem_43_answers) == 0:
+                await update.message.reply_text(
+                    f"❌ 43-savol uchun hech bo'lmaganda 1 ta javob kiritish kerak!\n\n"
+                    f"Qaytadan urinib ko'ring."
+                )
+                return
+            
+            # 43-savol javoblarini saqlash
+            context.user_data['problem_43_answers'] = problem_43_answers
+            
+            # Barcha javoblar to'plandi - testni yaratish
             # Savollarni yaratish
             questions = []
-            # Avval 1-35 savollar uchun ko'p tanlov savollarini yaratish
+            
+            # 1-35 savollar uchun ko'p tanlov savollarini yaratish
             mc_answers = context.user_data.get('mc_answers', [])
             for idx, answer in enumerate(mc_answers):
-                # 33, 34, 35-savollar uchun 6 ta variant, boshqalar uchun 4 ta
-                # (Test fayliga muvofiq: 33-40 savollar uchun 6 variant)
-                if idx in [32, 33, 34]:  # 33, 34, 35-savollar (0-based index: 32, 33, 34)
+                if idx in [32, 33, 34]:  # 33, 34, 35-savollar
                     options = ['a', 'b', 'c', 'd', 'e', 'f']
                     questions.append({
                         'question': f"Savol {idx + 1}",
@@ -579,24 +722,53 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
                     })
             
             # 36-40 savollar uchun yozma javob savollarini yaratish
+            text_answers = context.user_data.get('text_answers', [])
             for idx, answer in enumerate(text_answers):
-                question_idx = 35 + idx  # 36, 37, 38, 39, 40-savollar (0-based: 35, 36, 37, 38, 39)
+                question_idx = 35 + idx
                 questions.append({
                     'question': f"Savol {question_idx + 1}",
-                    'type': 'text_answer',  # Yozma javob turi
-                    'options': [],  # Variantlar yo'q
-                    'correct': answer  # To'g'ri javob (qo'lda tekshirish uchun)
+                    'type': 'text_answer',
+                    'options': [],
+                    'correct': answer
                 })
             
-            # Javoblarni saqlash va darhol testni yaratish
+            # 41-savol (masalaviy) uchun javoblarni qo'shish
+            problem_41_answers = context.user_data.get('problem_41_answers', [])
+            questions.append({
+                'question': f"Savol 41 (masalaviy)",
+                'type': 'problem',
+                'options': [],
+                'correct': problem_41_answers,  # List of answers
+                'sub_question_count': len(problem_41_answers)
+            })
+            
+            # 42-savol (masalaviy) uchun javoblarni qo'shish
+            questions.append({
+                'question': f"Savol 42 (masalaviy)",
+                'type': 'problem',
+                'options': [],
+                'correct': problem_42_answers,
+                'sub_question_count': len(problem_42_answers)
+            })
+            
+            # 43-savol (masalaviy) uchun javoblarni qo'shish
+            questions.append({
+                'question': f"Savol 43 (masalaviy)",
+                'type': 'problem',
+                'options': [],
+                'correct': problem_43_answers,
+                'sub_question_count': len(problem_43_answers)
+            })
+            
+            # Javoblarni saqlash va testni yaratish
             context.user_data['test_questions'] = questions
             
-            # Test darhol yaratiladi
+            # Test yaratish
             await save_test_immediately(update, context)
             return
         
         except Exception as e:
-            logger.error(f"Yozma javoblar qayta ishlash xatosi: {e}")
+            logger.error(f"43-savol javoblarini qayta ishlash xatosi: {e}")
             await update.message.reply_text(f"❌ Xatolik: {str(e)}")
     
     elif step == 'answers':
