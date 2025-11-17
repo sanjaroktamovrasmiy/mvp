@@ -1226,6 +1226,51 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
 
     test = data['tests'][test_id]
 
+    # Masalaviy javoblar kiritilayotganini tekshirish (41-43 savollar uchun)
+    waiting_problem_answers = context.user_data[test_data_key].get('waiting_problem_answers', False)
+    
+    if waiting_problem_answers:
+        # Masalaviy javoblar kiritilmoqda (41-43 savollar)
+        lines = text.split('\n')
+        problem_answers = []
+        
+        for line in lines:
+            line = line.strip()
+            if line:
+                problem_answers.append(line)
+        
+        # 41-43 savollar uchun kerakli javoblar sonini tekshirish
+        problem_questions = [q for q in test['questions'] if q.get('type') == 'problem']
+        total_problem_answers_needed = sum(q.get('sub_question_count', 0) for q in problem_questions)
+        
+        if len(problem_answers) != total_problem_answers_needed:
+            await update.message.reply_text(
+                f"❌ Masalaviy javoblar soni noto'g'ri!\n\n"
+                f"41-43 savollar uchun {total_problem_answers_needed} ta javob kerak.\n"
+                f"Hozirgi son: {len(problem_answers)} ta\n\n"
+                f"Har bir javobni alohida qatorda yozing."
+            )
+            return True
+        
+        # Masalaviy javoblarni saqlash
+        # 41-43 savollar uchun (indices 40-42)
+        answer_idx = 0
+        for q_idx, question in enumerate(test['questions']):
+            if question.get('type') == 'problem':
+                sub_count = question.get('sub_question_count', 0)
+                # Har bir masalaviy savol uchun bir nechta javob bo'lishi mumkin
+                # Ularni vergul bilan birlashtiramiz
+                sub_answers = problem_answers[answer_idx:answer_idx + sub_count]
+                combined_answer = ','.join(sub_answers)
+                context.user_data[test_data_key]['answers'][str(q_idx)] = combined_answer
+                answer_idx += sub_count
+        
+        # Testni yakunlash
+        context.user_data[test_data_key]['waiting_answers'] = False
+        context.user_data[test_data_key]['waiting_problem_answers'] = False
+        await finish_test(update, context, test_id)
+        return True
+    
     # Yozma javoblar kiritilayotganini tekshirish (36-40 savollar uchun)
     waiting_text_answers = context.user_data[test_data_key].get('waiting_text_answers', False)
 
@@ -1267,11 +1312,39 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
             question_idx = text_question_indices[idx]
             context.user_data[test_data_key]['answers'][str(question_idx)] = answer
 
-        # Testni yakunlash
-        context.user_data[test_data_key]['waiting_answers'] = False
-        context.user_data[test_data_key]['waiting_text_answers'] = False
-        await finish_test(update, context, test_id)
-        return True
+        # 41-43 savollar mavjudligini tekshirish
+        has_problem_questions = any(
+            q.get('type') == 'problem'
+            for q in test['questions']
+        )
+
+        # Agar 41-43 savollar mavjud bo'lsa, ular uchun javoblarni so'rash
+        if has_problem_questions:
+            context.user_data[test_data_key]['waiting_text_answers'] = False
+            context.user_data[test_data_key]['waiting_problem_answers'] = True
+            
+            # 41-43 savollar uchun kerakli javoblar sonini hisoblash
+            problem_questions = [q for q in test['questions'] if q.get('type') == 'problem']
+            total_problem_answers = sum(q.get('sub_question_count', 0) for q in problem_questions)
+            
+            await update.message.reply_text(
+                f"✅ 36-40 savollar uchun javoblar qabul qilindi!\n\n"
+                f"📝 Endi 41-43 masalaviy savollar uchun javoblarni kiriting:\n\n"
+                f"Jami {total_problem_answers} ta javob kerak.\n"
+                f"Har bir javobni alohida qatorda yozing.\n\n"
+                f"Masalan:\n"
+                f"javob1\n"
+                f"javob2\n"
+                f"javob3\n"
+                f"..."
+            )
+            return True
+        else:
+            # 41-43 savollar yo'q bo'lsa, testni yakunlash
+            context.user_data[test_data_key]['waiting_answers'] = False
+            context.user_data[test_data_key]['waiting_text_answers'] = False
+            await finish_test(update, context, test_id)
+            return True
 
     else:
         # Ko'p tanlov javoblari kiritilmoqda (1-35 savollar)
@@ -1361,19 +1434,46 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
     for idx, question in enumerate(test['questions']):
         user_answer = user_answers.get(str(idx), '')
 
-        # Yozma javoblar uchun avtomatik baholash qilinmaydi (qo'lda tekshirish kerak)
+        # Yozma javoblar uchun avtomatik tekshirish (36-40 savollar)
         if question.get('type') == 'text_answer':
-            # Yozma javoblar uchun is_correct None yoki False bo'ladi (qo'lda tekshirish uchun)
-            is_correct = None  # Qo'lda tekshirish kerak
+            correct_answer = question.get('correct', '')
+            # Case-insensitive tekshirish
+            is_correct = user_answer.strip().lower() == correct_answer.strip().lower()
+            if is_correct:
+                correct += 1
             results.append({
                 'question': question['question'],
                 'user_answer': user_answer,
-                'correct_answer': question.get('correct', ''),
+                'correct_answer': correct_answer,
                 'is_correct': is_correct,
-                'type': 'text_answer'  # Yozma javob ekanligini belgilash
+                'type': 'text_answer'
+            })
+        # Masalaviy javoblar uchun avtomatik tekshirish (41-43 savollar)
+        elif question.get('type') == 'problem':
+            correct_answers = question.get('correct', [])
+            # User answer vergul bilan ajratilgan
+            user_answers_list = [a.strip() for a in user_answer.split(',')]
+            
+            # Har bir javobni tekshirish
+            correct_count = 0
+            for user_ans, correct_ans in zip(user_answers_list, correct_answers):
+                if user_ans.strip().lower() == correct_ans.strip().lower():
+                    correct_count += 1
+            
+            # Agar barcha javoblar to'g'ri bo'lsa
+            is_correct = (correct_count == len(correct_answers))
+            if is_correct:
+                correct += 1
+            
+            results.append({
+                'question': question['question'],
+                'user_answer': user_answer,
+                'correct_answer': ','.join(correct_answers) if isinstance(correct_answers, list) else correct_answers,
+                'is_correct': is_correct,
+                'type': 'problem'
             })
         else:
-            # Ko'p tanlov javoblari uchun avtomatik tekshirish
+            # Ko'p tanlov javoblari uchun avtomatik tekshirish (1-35 savollar)
             is_correct = user_answer == question['correct']
             if is_correct:
                 correct += 1
