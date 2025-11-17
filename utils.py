@@ -239,7 +239,13 @@ def _generate_pdf_with_reportlab(title, lines):
 
 
 def generate_response_matrix(test_id, data):
-    """0-1 matrix yaratish Excel formatida (user_id, question1, question2, ...)"""
+    """0-1 matrix yaratish Excel formatida (user_id, question1, question2, ...)
+    
+    Uchta alohida sheet yaratadi:
+    1. Multiple Choice (1-35 savollar) - 0/1 formatida
+    2. Text Answers (36-40 savollar) - javoblar matni
+    3. Problem-based (41-43 savollar) - javoblar matni
+    """
     try:
         # Test natijalarini to'plash
         test_results = [
@@ -252,39 +258,123 @@ def generate_response_matrix(test_id, data):
         
         # Excel workbook yaratish
         wb = Workbook()
-        ws = wb.active
-        ws.title = "Response Matrix"
         
-        # Header: user_id, Q1, Q2, Q3, ...
-        total_questions = len(test_results[0]['results']) if test_results else 0
-        header = ['user_id'] + [f'Q{i+1}' for i in range(total_questions)]
-        ws.append(header)
+        # Standart sheetni o'chirish
+        if 'Sheet' in wb.sheetnames:
+            wb.remove(wb['Sheet'])
+        
+        from openpyxl.styles import Font, Alignment
+        
+        # 1. Multiple Choice (1-35 savollar) uchun sheet
+        ws_mc = wb.create_sheet("Multiple Choice (1-35)")
+        
+        # Header: user_id, Q1, Q2, ..., Q35
+        mc_header = ['user_id'] + [f'Q{i+1}' for i in range(35)]
+        ws_mc.append(mc_header)
         
         # Header qatorini qalinlashtirish
-        from openpyxl.styles import Font
-        for cell in ws[1]:
+        for cell in ws_mc[1]:
             cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
         
-        # Har bir foydalanuvchi uchun qator
+        # Har bir foydalanuvchi uchun qator (faqat 1-35 savollar)
         for result in test_results:
             user_id = result['user_id']
             row = [user_id]
             
-            # Har bir savol uchun 0 yoki 1
-            for res in result['results']:
-                value = 1 if res['is_correct'] else 0
+            # Faqat birinchi 35 ta savol (0-34 indices)
+            for i, res in enumerate(result['results'][:35]):
+                if res.get('is_correct') is None:
+                    value = 'N/A'
+                else:
+                    value = 1 if res['is_correct'] else 0
                 row.append(value)
             
-            ws.append(row)
+            ws_mc.append(row)
         
-        # Matn formatini ham saqlash (fallback uchun)
+        # 2. Text Answers (36-40 savollar) uchun sheet
+        ws_text = wb.create_sheet("Text Answers (36-40)")
+        
+        # Header: user_id, Q36, Q37, ..., Q40, Q36_correct, Q37_correct, ...
+        text_header = ['user_id']
+        for i in range(36, 41):
+            text_header.append(f'Q{i}_javob')
+        for i in range(36, 41):
+            text_header.append(f'Q{i}_tugri')
+        ws_text.append(text_header)
+        
+        # Header qatorini qalinlashtirish
+        for cell in ws_text[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Har bir foydalanuvchi uchun qator (36-40 savollar)
+        for result in test_results:
+            user_id = result['user_id']
+            row = [user_id]
+            
+            # 36-40 savollar uchun javoblar (indices 35-39)
+            text_results = result['results'][35:40] if len(result['results']) > 35 else []
+            
+            # Foydalanuvchi javoblari
+            for res in text_results:
+                user_answer = res.get('user_answer', '')
+                row.append(user_answer)
+            
+            # To'g'ri javoblar
+            for res in text_results:
+                correct_answer = res.get('correct_answer', '')
+                row.append(correct_answer)
+            
+            ws_text.append(row)
+        
+        # 3. Problem-based (41-43 savollar) uchun sheet
+        ws_problem = wb.create_sheet("Problems (41-43)")
+        
+        # Header: user_id, Q41, Q42, Q43, Q41_correct, Q42_correct, Q43_correct
+        problem_header = ['user_id']
+        for i in range(41, 44):
+            problem_header.append(f'Q{i}_javob')
+        for i in range(41, 44):
+            problem_header.append(f'Q{i}_tugri')
+        ws_problem.append(problem_header)
+        
+        # Header qatorini qalinlashtirish
+        for cell in ws_problem[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Har bir foydalanuvchi uchun qator (41-43 savollar)
+        for result in test_results:
+            user_id = result['user_id']
+            row = [user_id]
+            
+            # 41-43 savollar uchun javoblar (indices 40-42)
+            problem_results = result['results'][40:43] if len(result['results']) > 40 else []
+            
+            # Foydalanuvchi javoblari
+            for res in problem_results:
+                user_answer = res.get('user_answer', '')
+                row.append(user_answer)
+            
+            # To'g'ri javoblar
+            for res in problem_results:
+                correct_answer = res.get('correct_answer', '')
+                row.append(correct_answer)
+            
+            ws_problem.append(row)
+        
+        # Matn formatini ham saqlash (faqat Multiple Choice uchun)
         matrix_lines = []
-        matrix_lines.append('\t'.join(header))
+        matrix_lines.append('\t'.join(mc_header))
         for result in test_results:
             user_id = result['user_id']
             row = [str(user_id)]
-            for res in result['results']:
-                value = '1' if res['is_correct'] else '0'
+            for i, res in enumerate(result['results'][:35]):
+                if res.get('is_correct') is None:
+                    value = 'N/A'
+                else:
+                    value = '1' if res['is_correct'] else '0'
                 row.append(value)
             matrix_lines.append('\t'.join(row))
         matrix_text = '\n'.join(matrix_lines)
@@ -292,7 +382,8 @@ def generate_response_matrix(test_id, data):
         # Excel fayl sifatida saqlash
         matrix_dir = "matrices"
         os.makedirs(matrix_dir, exist_ok=True)
-        matrix_file_path = os.path.join(matrix_dir, f"matrix_{test_id}.xlsx")
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        matrix_file_path = os.path.join(matrix_dir, f"matrix_{test_id}_{timestamp}.xlsx")
         
         wb.save(matrix_file_path)
         
