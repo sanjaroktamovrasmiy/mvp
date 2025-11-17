@@ -839,14 +839,13 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(
                 f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
                 f"📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
-                f"⚠️ Har bir savol uchun alohida qatorda javob yozing (jami 5 ta qator):\n\n"
+                f"Har bir savol uchun alohida qatorda javob yozing.\n\n"
                 f"Masalan:\n"
-                f"ahsb\n"
-                f"hhhsbb\n"
-                f"cccccc\n"
-                f"uuus77\n"
-                f"javob40\n\n"
-                f"⚠️ Barcha savollarga javob berish majburiy!"
+                f"Javob 36-savolga\n"
+                f"Javob 37-savolga\n"
+                f"Javob 38-savolga\n"
+                f"Javob 39-savolga\n"
+                f"Javob 40-savolga"
             )
             return
 
@@ -1253,7 +1252,7 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"36-40 savollar uchun {len(text_question_indices)} ta javob kerak.\n"
                 f"Hozirgi son: {len(text_answers)} ta\n\n"
                 f"Har bir savol uchun alohida qatorda javob yozing.\n"
-                f"Qavs ichida tushuntirish yozishingiz mumkin:\n"
+                f"Qavs ichida tushuntirish yozishingiz mumkin (qavs ichidagi matn alohida javob deb hisoblanmaydi).\n\n"
                 f"Masalan:\n"
                 f"Javob 36-savolga (tushuntirish)\n"
                 f"Javob 37-savolga\n"
@@ -1325,16 +1324,15 @@ async def process_test_answers(update: Update, context: ContextTypes.DEFAULT_TYP
         if has_text_questions:
             context.user_data[test_data_key]['waiting_text_answers'] = True
             await update.message.reply_text(
-                "✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
-                "📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
-                "Har bir savol uchun alohida qatorda javob yozing.\n"
-                "Qavs ichida tushuntirish yozishingiz mumkin (qavs ichidagi matn alohida javob deb hisoblanmaydi).\n\n"
-                "Masalan:\n"
-                "Javob 36-savolga (tushuntirish)\n"
-                "Javob 37-savolga\n"
-                "Javob 38-savolga (qavs ichidagi matn)\n"
-                "Javob 39-savolga\n"
-                "Javob 40-savolga"
+                f"✅ 1-35 savollar uchun javoblar qabul qilindi!\n\n"
+                f"📝 Endi 36-40 savollar uchun yozma javoblarni kiriting:\n\n"
+                f"Har bir savol uchun alohida qatorda javob yozing.\n\n"
+                f"Masalan:\n"
+                f"Javob 36-savolga\n"
+                f"Javob 37-savolga\n"
+                f"Javob 38-savolga\n"
+                f"Javob 39-savolga\n"
+                f"Javob 40-savolga"
             )
             return True
         else:
