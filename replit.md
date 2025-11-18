@@ -130,16 +130,24 @@ The bot interface is in Uzbek language.
 
 ## Recent Changes
 
-### November 18, 2025 - Matrix Export: Two Separate Excel Files
-- **Matrix yaratish tizimi to'liq o'zgartirildi** (`utils.py`):
-  - Avvalda: **Bitta Excel fayl** ichida 2 ta sheet (Questions 1-40, Questions 41-43)
-  - Hozir: **Ikkita alohida Excel fayl**:
+### November 18, 2025 - Matrix Export: Detailed Sub-Questions for 41-43
+- **Matrix yaratish tizimi to'liq o'zgartirildi** (`utils.py` va `handlers.py`):
+  - **Ikkita alohida Excel fayl**:
     - `matrix_1-40_{test_id}_{timestamp}.xlsx` - 1-40 savollar uchun
-    - `matrix_41-43_{test_id}_{timestamp}.xlsx` - 41-43 savollar uchun
-- **download_matrix funksiyasi yangilandi** (`handlers.py`):
-  - Ikkala faylni ketma-ket yuboradi
-  - Har bir fayl uchun alohida caption va nom
-- **Test natijasi**: Endi matrix yuklab olganingizda **2 ta alohida .xlsx fayl** olasiz
+    - `matrix_41-43_{test_id}_{timestamp}.xlsx` - 41-43 savollar uchun **batafsil formatda**
+  
+- **41-43 savollar uchun batafsil matrix**:
+  - Har bir masalaviy savolning kichik savollari uchun alohida ustun
+  - Format: `Talabgor | 41.1 | 41.2 | 41.3 | 41.4 | 42.1 | 42.2 | ... | 43.3`
+  - Misol (41-savol=4ta, 42-savol=5ta, 43-savol=3ta):
+    - Jami 12 ta ustun (4+5+3) + 1 Talabgor ustuni
+  
+- **Kod o'zgarishlari**:
+  - `handlers.py`: `finish_test` funksiyasida har bir kichik javobning natijasi `sub_results` da alohida saqlanadi
+  - `utils.py`: Matrix yaratishda `sub_results` dan foydalanib har bir kichik savol uchun alohida ustun yaratiladi
+  - Birinchi ustunda foydalanuvchi ID o'rniga to'liq ism-familya ko'rsatiladi
+  
+- **Test natijasi**: Endi matrix yuklab olganingizda **2 ta alohida .xlsx fayl** olasiz - ikkinchisi har bir kichik savol natijasini alohida ko'rsatadi
 
 ### November 17, 2025 - Complete System Overhaul for Auto-Grading
 - **All questions (1-43) now auto-graded**: Removed manual review requirement

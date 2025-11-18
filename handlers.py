@@ -1454,11 +1454,19 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
             # User answer vergul bilan ajratilgan
             user_answers_list = [a.strip() for a in user_answer.split(',')]
             
-            # Har bir javobni tekshirish
+            # Har bir javobni tekshirish va alohida saqlash
+            sub_results = []
             correct_count = 0
-            for user_ans, correct_ans in zip(user_answers_list, correct_answers):
-                if user_ans.strip().lower() == correct_ans.strip().lower():
+            for i, (user_ans, correct_ans) in enumerate(zip(user_answers_list, correct_answers)):
+                is_sub_correct = user_ans.strip().lower() == correct_ans.strip().lower()
+                if is_sub_correct:
                     correct_count += 1
+                sub_results.append({
+                    'sub_index': i + 1,
+                    'user_answer': user_ans.strip(),
+                    'correct_answer': correct_ans.strip(),
+                    'is_correct': is_sub_correct
+                })
             
             # Agar barcha javoblar to'g'ri bo'lsa
             is_correct = (correct_count == len(correct_answers))
@@ -1470,7 +1478,9 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
                 'user_answer': user_answer,
                 'correct_answer': ','.join(correct_answers) if isinstance(correct_answers, list) else correct_answers,
                 'is_correct': is_correct,
-                'type': 'problem'
+                'type': 'problem',
+                'sub_results': sub_results,
+                'sub_question_count': len(correct_answers)
             })
         else:
             # Ko'p tanlov javoblari uchun avtomatik tekshirish (1-35 savollar)
@@ -1774,8 +1784,9 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
                     document=f2,
                     filename=f"matrix_41-43_{test_id}.xlsx",
                     caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
-                            f"📊 41-43 savollar uchun matrix\n"
-                            f"Format: user_id, Q41, Q42, Q43\n"
+                            f"📊 41-43 savollar uchun batafsil matrix\n"
+                            f"Format: Talabgor, 41.1, 41.2, ..., 43.n\n"
+                            f"Har bir kichik savol uchun alohida ustun\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
                 await update.callback_query.answer("✅ Ikkala matrix ham yuborildi!")
@@ -1784,8 +1795,9 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
                     document=f2,
                     filename=f"matrix_41-43_{test_id}.xlsx",
                     caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
-                            f"📊 41-43 savollar uchun matrix\n"
-                            f"Format: user_id, Q41, Q42, Q43\n"
+                            f"📊 41-43 savollar uchun batafsil matrix\n"
+                            f"Format: Talabgor, 41.1, 41.2, ..., 43.n\n"
+                            f"Har bir kichik savol uchun alohida ustun\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
     except Exception as e:

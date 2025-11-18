@@ -299,6 +299,7 @@ def generate_response_matrix(test_id, data):
         wb_main.save(file_path_1_40)
         
         # ===== 2. Questions 41-43 uchun alohida Excel fayl =====
+        # Har bir kichik savol uchun alohida ustun
         wb_problem = Workbook()
         
         # Standart sheetni o'chirish
@@ -307,8 +308,20 @@ def generate_response_matrix(test_id, data):
         
         ws_problem = wb_problem.create_sheet("Questions 41-43")
         
-        # Header: user_id, Q41, Q42, Q43
-        problem_header = ['user_id'] + [f'Q{i+1}' for i in range(40, 43)]
+        # Header yaratish: Talabgor, 41.1, 41.2, ..., 43.n
+        problem_header = ['Talabgor']
+        
+        # Birinchi natijadan masalaviy savollar strukturasini olish
+        if test_results and len(test_results[0]['results']) > 40:
+            for q_idx, res in enumerate(test_results[0]['results'][40:43], start=41):
+                if res.get('type') == 'problem' and 'sub_results' in res:
+                    # Har bir kichik savol uchun ustun
+                    for sub in res['sub_results']:
+                        problem_header.append(f"{q_idx}.{sub['sub_index']}")
+                else:
+                    # Eski format - faqat Q41, Q42, Q43
+                    problem_header.append(f"Q{q_idx}")
+        
         ws_problem.append(problem_header)
         
         # Header qatorini qalinlashtirish
@@ -319,14 +332,24 @@ def generate_response_matrix(test_id, data):
         # Har bir foydalanuvchi uchun qator (41-43 savollar)
         for result in test_results:
             user_id = result['user_id']
-            row = [user_id]
+            
+            # Foydalanuvchi ismini olish
+            user_name = data.get('users', {}).get(str(user_id), {}).get('full_name', str(user_id))
+            row = [user_name]
             
             # 41-43 savollar uchun javoblar (indices 40-42)
             problem_results = result['results'][40:43] if len(result['results']) > 40 else []
             
             for res in problem_results:
-                value = 1 if res.get('is_correct') else 0
-                row.append(value)
+                if res.get('type') == 'problem' and 'sub_results' in res:
+                    # Har bir kichik javob uchun alohida ustun
+                    for sub in res['sub_results']:
+                        value = 1 if sub.get('is_correct') else 0
+                        row.append(value)
+                else:
+                    # Eski format - faqat umumiy natija
+                    value = 1 if res.get('is_correct') else 0
+                    row.append(value)
             
             ws_problem.append(row)
         
