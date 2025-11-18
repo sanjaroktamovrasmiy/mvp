@@ -1733,41 +1733,59 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             await update.callback_query.answer("❌ Bu testni matrixini yuklab olish huquqingiz yo'q!")
         return
 
-    # Matrix yaratish/yangilash
+    # Matrix yaratish/yangilash - ikkita alohida fayl
     from utils import generate_response_matrix
-    matrix_file_path, matrix_text = generate_response_matrix(test_id, data)
+    file_path_1_40, file_path_41_43, matrix_text = generate_response_matrix(test_id, data)
 
-    if not matrix_file_path or not matrix_text:
+    if not file_path_1_40 or not file_path_41_43:
         if update.callback_query:
             await update.callback_query.answer("❌ Matrix yaratib bo'lmadi yoki hali natijalar yo'q!", show_alert=True)
         else:
             await update.message.reply_text("❌ Matrix yaratib bo'lmadi yoki hali natijalar yo'q!")
         return
 
-    # Matrix faylini yuborish
+    # Ikkita matrix faylini yuborish
     try:
-        with open(matrix_file_path, 'rb') as f:
+        # 1. Questions 1-40 faylini yuborish
+        with open(file_path_1_40, 'rb') as f1:
             if update.callback_query:
                 await update.callback_query.message.reply_document(
-                    document=f,
-                    filename=f"matrix_{test_id}.xlsx",
-                    caption=f"📋 0-1 Matrix: {test['name']}\n\n"
-                            f"📊 Excel faylda 2 ta sheet mavjud:\n"
-                            f"1️⃣ Questions 1-40 (40 ta savol)\n"
-                            f"2️⃣ Questions 41-43 (3 ta savol)\n\n"
-                            f"Format: user_id, Q1, Q2, Q3, ...\n"
+                    document=f1,
+                    filename=f"matrix_1-40_{test_id}.xlsx",
+                    caption=f"📋 0-1 Matrix (1-dars): {test['name']}\n\n"
+                            f"📊 1-40 savollar uchun matrix\n"
+                            f"Format: user_id, Q1, Q2, ..., Q40\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
-                await update.callback_query.answer("✅ Matrix yuborildi!")
             else:
                 await update.message.reply_document(
-                    document=f,
-                    filename=f"matrix_{test_id}.xlsx",
-                    caption=f"📋 0-1 Matrix: {test['name']}\n\n"
-                            f"📊 Excel faylda 2 ta sheet mavjud:\n"
-                            f"1️⃣ Questions 1-40 (40 ta savol)\n"
-                            f"2️⃣ Questions 41-43 (3 ta savol)\n\n"
-                            f"Format: user_id, Q1, Q2, Q3, ...\n"
+                    document=f1,
+                    filename=f"matrix_1-40_{test_id}.xlsx",
+                    caption=f"📋 0-1 Matrix (1-dars): {test['name']}\n\n"
+                            f"📊 1-40 savollar uchun matrix\n"
+                            f"Format: user_id, Q1, Q2, ..., Q40\n"
+                            f"0 = xato javob, 1 = to'g'ri javob"
+                )
+        
+        # 2. Questions 41-43 faylini yuborish
+        with open(file_path_41_43, 'rb') as f2:
+            if update.callback_query:
+                await update.callback_query.message.reply_document(
+                    document=f2,
+                    filename=f"matrix_41-43_{test_id}.xlsx",
+                    caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
+                            f"📊 41-43 savollar uchun matrix\n"
+                            f"Format: user_id, Q41, Q42, Q43\n"
+                            f"0 = xato javob, 1 = to'g'ri javob"
+                )
+                await update.callback_query.answer("✅ Ikkala matrix ham yuborildi!")
+            else:
+                await update.message.reply_document(
+                    document=f2,
+                    filename=f"matrix_41-43_{test_id}.xlsx",
+                    caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
+                            f"📊 41-43 savollar uchun matrix\n"
+                            f"Format: user_id, Q41, Q42, Q43\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
     except Exception as e:

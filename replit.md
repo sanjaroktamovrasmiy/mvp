@@ -6,7 +6,7 @@ This is a Telegram bot for educational testing and assessment. The bot allows ad
 
 **Current State**: ✅ Running and operational on Replit
 
-**Last Updated**: November 17, 2025
+**Last Updated**: November 18, 2025
 
 ## Project Architecture
 
@@ -129,6 +129,17 @@ All timestamps use Uzbekistan time (Asia/Tashkent, UTC+5)
 The bot interface is in Uzbek language.
 
 ## Recent Changes
+
+### November 18, 2025 - Matrix Export: Two Separate Excel Files
+- **Matrix yaratish tizimi to'liq o'zgartirildi** (`utils.py`):
+  - Avvalda: **Bitta Excel fayl** ichida 2 ta sheet (Questions 1-40, Questions 41-43)
+  - Hozir: **Ikkita alohida Excel fayl**:
+    - `matrix_1-40_{test_id}_{timestamp}.xlsx` - 1-40 savollar uchun
+    - `matrix_41-43_{test_id}_{timestamp}.xlsx` - 41-43 savollar uchun
+- **download_matrix funksiyasi yangilandi** (`handlers.py`):
+  - Ikkala faylni ketma-ket yuboradi
+  - Har bir fayl uchun alohida caption va nom
+- **Test natijasi**: Endi matrix yuklab olganingizda **2 ta alohida .xlsx fayl** olasiz
 
 ### November 17, 2025 - Complete System Overhaul for Auto-Grading
 - **All questions (1-43) now auto-graded**: Removed manual review requirement

@@ -239,11 +239,14 @@ def _generate_pdf_with_reportlab(title, lines):
 
 
 def generate_response_matrix(test_id, data):
-    """0-1 matrix yaratish Excel formatida (user_id, question1, question2, ...)
+    """0-1 matrix yaratish Excel formatida - ikkita alohida fayl
     
-    Ikkita alohida sheet yaratadi:
-    1. Questions 1-40 - 0/1 formatida (avtomatik tekshiriladigan barcha savollar)
-    2. Questions 41-43 - 0/1 formatida (masalaviy savollar, alohida sheet)
+    Ikkita alohida Excel fayl yaratadi:
+    1. matrix_1-40_*.xlsx - Questions 1-40 uchun
+    2. matrix_41-43_*.xlsx - Questions 41-43 uchun
+    
+    Returns:
+        tuple: (file_path_1_40, file_path_41_43, matrix_text) yoki (None, None, None)
     """
     try:
         # Test natijalarini to'plash
@@ -253,19 +256,22 @@ def generate_response_matrix(test_id, data):
         ]
         
         if not test_results:
-            return None, None
-        
-        # Excel workbook yaratish
-        wb = Workbook()
-        
-        # Standart sheetni o'chirish
-        if 'Sheet' in wb.sheetnames:
-            wb.remove(wb['Sheet'])
+            return None, None, None
         
         from openpyxl.styles import Font, Alignment
         
-        # 1. Questions 1-40 uchun sheet (0/1 format)
-        ws_main = wb.create_sheet("Questions 1-40")
+        matrix_dir = "matrices"
+        os.makedirs(matrix_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        
+        # ===== 1. Questions 1-40 uchun alohida Excel fayl =====
+        wb_main = Workbook()
+        
+        # Standart sheetni o'chirish
+        if 'Sheet' in wb_main.sheetnames:
+            wb_main.remove(wb_main['Sheet'])
+        
+        ws_main = wb_main.create_sheet("Questions 1-40")
         
         # Header: user_id, Q1, Q2, ..., Q40
         main_header = ['user_id'] + [f'Q{i+1}' for i in range(40)]
@@ -288,8 +294,18 @@ def generate_response_matrix(test_id, data):
             
             ws_main.append(row)
         
-        # 2. Questions 41-43 uchun sheet (0/1 format, alohida)
-        ws_problem = wb.create_sheet("Questions 41-43")
+        # Birinchi faylni saqlash
+        file_path_1_40 = os.path.join(matrix_dir, f"matrix_1-40_{test_id}_{timestamp}.xlsx")
+        wb_main.save(file_path_1_40)
+        
+        # ===== 2. Questions 41-43 uchun alohida Excel fayl =====
+        wb_problem = Workbook()
+        
+        # Standart sheetni o'chirish
+        if 'Sheet' in wb_problem.sheetnames:
+            wb_problem.remove(wb_problem['Sheet'])
+        
+        ws_problem = wb_problem.create_sheet("Questions 41-43")
         
         # Header: user_id, Q41, Q42, Q43
         problem_header = ['user_id'] + [f'Q{i+1}' for i in range(40, 43)]
@@ -314,6 +330,10 @@ def generate_response_matrix(test_id, data):
             
             ws_problem.append(row)
         
+        # Ikkinchi faylni saqlash
+        file_path_41_43 = os.path.join(matrix_dir, f"matrix_41-43_{test_id}_{timestamp}.xlsx")
+        wb_problem.save(file_path_41_43)
+        
         # Matn formatini ham saqlash (1-40 savollar uchun)
         matrix_lines = []
         matrix_lines.append('\t'.join(main_header))
@@ -326,18 +346,10 @@ def generate_response_matrix(test_id, data):
             matrix_lines.append('\t'.join(row))
         matrix_text = '\n'.join(matrix_lines)
         
-        # Excel fayl sifatida saqlash
-        matrix_dir = "matrices"
-        os.makedirs(matrix_dir, exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        matrix_file_path = os.path.join(matrix_dir, f"matrix_{test_id}_{timestamp}.xlsx")
-        
-        wb.save(matrix_file_path)
-        
-        return matrix_file_path, matrix_text
+        return file_path_1_40, file_path_41_43, matrix_text
         
     except Exception as e:
         logger.error(f"Matrix yaratish xatosi: {e}")
-        return None, None
+        return None, None, None
 
 
