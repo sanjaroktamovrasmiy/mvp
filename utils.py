@@ -311,13 +311,17 @@ def generate_response_matrix(test_id, data):
         # Header yaratish: Talabgor, 41.1, 41.2, ..., 43.n
         problem_header = ['Talabgor']
         
-        # Birinchi natijadan masalaviy savollar strukturasini olish
-        if test_results and len(test_results[0]['results']) > 40:
-            for q_idx, res in enumerate(test_results[0]['results'][40:43], start=41):
-                if res.get('type') == 'problem' and 'sub_results' in res:
+        # Testdan masalaviy savollar strukturasini olish
+        test = data.get('tests', {}).get(test_id)
+        if test and test.get('questions'):
+            problem_questions = [q for q in test['questions'][40:43] if q.get('type') == 'problem']
+            
+            for q_idx, question in enumerate(problem_questions, start=41):
+                sub_count = question.get('sub_question_count', 0)
+                if sub_count > 0:
                     # Har bir kichik savol uchun ustun
-                    for sub in res['sub_results']:
-                        problem_header.append(f"{q_idx}.{sub['sub_index']}")
+                    for sub_idx in range(1, sub_count + 1):
+                        problem_header.append(f"{q_idx}.{sub_idx}")
                 else:
                     # Eski format - faqat Q41, Q42, Q43
                     problem_header.append(f"Q{q_idx}")
@@ -340,16 +344,29 @@ def generate_response_matrix(test_id, data):
             # 41-43 savollar uchun javoblar (indices 40-42)
             problem_results = result['results'][40:43] if len(result['results']) > 40 else []
             
-            for res in problem_results:
+            for q_idx, res in enumerate(problem_results, start=41):
                 if res.get('type') == 'problem' and 'sub_results' in res:
-                    # Har bir kichik javob uchun alohida ustun
+                    # Yangi format - har bir kichik javob uchun alohida ustun
                     for sub in res['sub_results']:
                         value = 1 if sub.get('is_correct') else 0
                         row.append(value)
                 else:
-                    # Eski format - faqat umumiy natija
-                    value = 1 if res.get('is_correct') else 0
-                    row.append(value)
+                    # Eski format - umumiy natija bo'yicha kichik javoblarni taxmin qilish
+                    # Testdan sub_question_count ni olish
+                    if test and len(test.get('questions', [])) > 40:
+                        original_q_idx = 40 + (q_idx - 41)
+                        question = test['questions'][original_q_idx]
+                        sub_count = question.get('sub_question_count', 1)
+                        
+                        # Agar umumiy javob to'g'ri bo'lsa, barcha kichik javoblar to'g'ri
+                        # Aks holda, barcha kichik javoblar noto'g'ri deb hisoblaymiz
+                        is_correct = res.get('is_correct', False)
+                        for _ in range(sub_count):
+                            row.append(1 if is_correct else 0)
+                    else:
+                        # Test topilmasa, faqat umumiy natijani qo'shamiz
+                        value = 1 if res.get('is_correct') else 0
+                        row.append(value)
             
             ws_problem.append(row)
         
