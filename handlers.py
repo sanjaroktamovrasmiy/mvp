@@ -1752,6 +1752,9 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
                     document=f,
                     filename=f"matrix_{test_id}.xlsx",
                     caption=f"📋 0-1 Matrix: {test['name']}\n\n"
+                            f"📊 Excel faylda 2 ta sheet mavjud:\n"
+                            f"1️⃣ Questions 1-40 (40 ta savol)\n"
+                            f"2️⃣ Questions 41-43 (3 ta savol)\n\n"
                             f"Format: user_id, Q1, Q2, Q3, ...\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
@@ -1761,6 +1764,9 @@ async def download_matrix(update: Update, context: ContextTypes.DEFAULT_TYPE, te
                     document=f,
                     filename=f"matrix_{test_id}.xlsx",
                     caption=f"📋 0-1 Matrix: {test['name']}\n\n"
+                            f"📊 Excel faylda 2 ta sheet mavjud:\n"
+                            f"1️⃣ Questions 1-40 (40 ta savol)\n"
+                            f"2️⃣ Questions 41-43 (3 ta savol)\n\n"
                             f"Format: user_id, Q1, Q2, Q3, ...\n"
                             f"0 = xato javob, 1 = to'g'ri javob"
                 )
