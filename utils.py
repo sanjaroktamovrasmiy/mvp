@@ -351,18 +351,28 @@ def generate_response_matrix(test_id, data):
                         value = 1 if sub.get('is_correct') else 0
                         row.append(value)
                 else:
-                    # Eski format - umumiy natija bo'yicha kichik javoblarni taxmin qilish
-                    # Testdan sub_question_count ni olish
+                    # Eski format - sub_results ni qayta yaratish
+                    # user_answer va correct_answer ni taqqoslash
                     if test and len(test.get('questions', [])) > 40:
                         original_q_idx = 40 + (q_idx - 41)
                         question = test['questions'][original_q_idx]
-                        sub_count = question.get('sub_question_count', 1)
                         
-                        # Agar umumiy javob to'g'ri bo'lsa, barcha kichik javoblar to'g'ri
-                        # Aks holda, barcha kichik javoblar noto'g'ri deb hisoblaymiz
-                        is_correct = res.get('is_correct', False)
-                        for _ in range(sub_count):
-                            row.append(1 if is_correct else 0)
+                        # Testdan to'g'ri javoblar ro'yxatini olish
+                        correct_answers = question.get('correct', [])
+                        
+                        # Foydalanuvchi javoblarini olish
+                        user_answer = res.get('user_answer', '')
+                        user_answers_list = [a.strip() for a in user_answer.split(',')] if user_answer else []
+                        
+                        # Har bir javobni taqqoslash
+                        for i, correct_ans in enumerate(correct_answers):
+                            if i < len(user_answers_list):
+                                user_ans = user_answers_list[i]
+                                is_sub_correct = user_ans.lower() == correct_ans.strip().lower()
+                                row.append(1 if is_sub_correct else 0)
+                            else:
+                                # Javob berilmagan
+                                row.append(0)
                     else:
                         # Test topilmasa, faqat umumiy natijani qo'shamiz
                         value = 1 if res.get('is_correct') else 0

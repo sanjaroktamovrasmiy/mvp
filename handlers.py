@@ -752,6 +752,7 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             })
 
             # 43-savol (masalaviy) uchun javoblarni qo'shish
+            problem_43_answers = context.user_data.get('problem_43_answers', [])
             questions.append({
                 'question': f"Savol 43 (masalaviy)",
                 'type': 'problem',
@@ -1512,13 +1513,15 @@ async def finish_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_i
 
     # 0-1 Matrix yaratish va yangilash
     from utils import generate_response_matrix
-    matrix_file_path, _ = generate_response_matrix(test_id, data)
-    if matrix_file_path:
+    matrix_file_path_1_40, matrix_file_path_41_43, _ = generate_response_matrix(test_id, data)
+    if matrix_file_path_1_40:
         # Matrix faylini test ma'lumotlariga saqlash
         if 'matrix_file' not in test:
-            test['matrix_file'] = matrix_file_path
-            data['tests'][test_id] = test
-            save_data(data)
+            test['matrix_file'] = matrix_file_path_1_40
+        if 'matrix_file_41_43' not in test and matrix_file_path_41_43:
+            test['matrix_file_41_43'] = matrix_file_path_41_43
+        data['tests'][test_id] = test
+        save_data(data)
 
     # Faqat "javobingiz qabul qilindi" deb yuborish
     # Natijalar testni natijalash tugmasi bosilguncha ko'rsatilmaydi
