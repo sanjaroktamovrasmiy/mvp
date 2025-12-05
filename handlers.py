@@ -2080,3 +2080,4 @@ async def process_admin_channel_commands(update: Update, context: ContextTypes.D
         else:
             await update.message.reply_text(f"❌ Bu kanal topilmadi.")
         context.user_data['removing_channel'] = False
+
