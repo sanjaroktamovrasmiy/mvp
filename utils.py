@@ -17,6 +17,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import load_data
 from openpyxl import Workbook, load_workbook
+from scipy.special import expit
 
 logger = logging.getLogger(__name__)
 
@@ -273,8 +274,8 @@ def generate_response_matrix(test_id, data):
         
         ws_main = wb_main.create_sheet("Questions 1-40")
         
-        # Header: user_id, Q1, Q2, ..., Q40
-        main_header = ['user_id'] + [f'Q{i+1}' for i in range(40)]
+        # Header: Talabgor, Q1, Q2, ..., Q40
+        main_header = ['Talabgor'] + [f'Q{i+1}' for i in range(40)]
         ws_main.append(main_header)
         
         # Header qatorini qalinlashtirish
@@ -285,7 +286,15 @@ def generate_response_matrix(test_id, data):
         # Har bir foydalanuvchi uchun qator (1-40 savollar)
         for result in test_results:
             user_id = result['user_id']
-            row = [user_id]
+            # Foydalanuvchi ism-familyasini olish
+            user_info = data.get('users', {}).get(str(user_id), {})
+            first_name = user_info.get('first_name', '').strip()
+            last_name = user_info.get('last_name', '').strip()
+            full_name = f"{first_name} {last_name}".strip()
+            # Agar ism-familya bo'lmasa, user_id ni ko'rsatish
+            if not full_name:
+                full_name = str(user_id)
+            row = [full_name]
             
             # Birinchi 40 ta savol (0-39 indices)
             for i, res in enumerate(result['results'][:40]):
@@ -337,9 +346,15 @@ def generate_response_matrix(test_id, data):
         for result in test_results:
             user_id = result['user_id']
             
-            # Foydalanuvchi ismini olish
-            user_name = data.get('users', {}).get(str(user_id), {}).get('full_name', str(user_id))
-            row = [user_name]
+            # Foydalanuvchi ism-familyasini olish
+            user_info = data.get('users', {}).get(str(user_id), {})
+            first_name = user_info.get('first_name', '').strip()
+            last_name = user_info.get('last_name', '').strip()
+            full_name = f"{first_name} {last_name}".strip()
+            # Agar ism-familya bo'lmasa, user_id ni ko'rsatish
+            if not full_name:
+                full_name = str(user_id)
+            row = [full_name]
             
             # 41-43 savollar uchun javoblar (indices 40-42)
             problem_results = result['results'][40:43] if len(result['results']) > 40 else []
@@ -389,7 +404,15 @@ def generate_response_matrix(test_id, data):
         matrix_lines.append('\t'.join(main_header))
         for result in test_results:
             user_id = result['user_id']
-            row = [str(user_id)]
+            # Foydalanuvchi ism-familyasini olish
+            user_info = data.get('users', {}).get(str(user_id), {})
+            first_name = user_info.get('first_name', '').strip()
+            last_name = user_info.get('last_name', '').strip()
+            full_name = f"{first_name} {last_name}".strip()
+            # Agar ism-familya bo'lmasa, user_id ni ko'rsatish
+            if not full_name:
+                full_name = str(user_id)
+            row = [full_name]
             for i, res in enumerate(result['results'][:40]):
                 value = '1' if res.get('is_correct') else '0'
                 row.append(value)
@@ -401,5 +424,417 @@ def generate_response_matrix(test_id, data):
     except Exception as e:
         logger.error(f"Matrix yaratish xatosi: {e}")
         return None, None, None
+
+
+def rasch_model_analysis(data_matrix):
+    """
+    Rasch model (1PL IRT) tahlili
+    
+    Parameters:
+    - data_matrix: Numpy array (qatorlar: talabalar, ustunlar: savollar), 0/1
+    
+    Returns:
+    - theta: Talabalar qobiliyati (float32)
+    - beta: Savollar qiyinligi (float32)
+    """
+    n_students, n_items = data_matrix.shape
+    
+    # Boshlang'ich baholar
+    student_scores = np.sum(data_matrix, axis=1, dtype=np.float64)
+    item_scores = np.sum(data_matrix, axis=0, dtype=np.float64)
+    
+    # Theta (talaba qobiliyatlari) - logit transformatsiya
+    theta = np.zeros(n_students, dtype=np.float64)
+    for i in range(n_students):
+        if student_scores[i] == 0:
+            theta[i] = -3.0
+        elif student_scores[i] == n_items:
+            theta[i] = 3.0
+        else:
+            p = (student_scores[i] + 0.5) / (n_items + 1)
+            p = np.clip(p, 1e-6, 1 - 1e-6)
+            theta[i] = np.log(p / (1 - p))
+    
+    # Beta (savol qiyinliklari) - logit transformatsiya
+    beta = np.zeros(n_items, dtype=np.float64)
+    for j in range(n_items):
+        if item_scores[j] == 0:
+            beta[j] = 3.0
+        elif item_scores[j] == n_students:
+            beta[j] = -3.0
+        else:
+            p = (item_scores[j] + 0.5) / (n_students + 1)
+            p = np.clip(p, 1e-6, 1 - 1e-6)
+            beta[j] = -np.log(p / (1 - p))
+    
+    # MLE iteratsiyalari (Rasch model uchun)
+    max_iter = 100
+    tol = 1e-6
+    REG_LAMBDA = 0.05
+    
+    for iteration in range(max_iter):
+        old_theta = theta.copy()
+        old_beta = beta.copy()
+        
+        # Ehtimolliklar hisoblash
+        logits = theta[:, np.newaxis] - beta[np.newaxis, :]
+        np.clip(logits, -15, 15, out=logits)
+        p = expit(logits)
+        residuals = data_matrix - p
+        
+        # Theta yangilanishi
+        grad_theta = np.sum(residuals, axis=1) - REG_LAMBDA * theta
+        hess_theta = np.sum(p * (1 - p), axis=1) + REG_LAMBDA
+        update_theta = np.where(hess_theta > 1e-10, grad_theta / hess_theta, 0.0)
+        theta += update_theta
+        
+        # Beta yangilanishi
+        grad_beta = -np.sum(residuals, axis=0) - REG_LAMBDA * beta
+        hess_beta = np.sum(p * (1 - p), axis=0) + REG_LAMBDA
+        update_beta = np.where(hess_beta > 1e-10, grad_beta / hess_beta, 0.0)
+        beta += update_beta
+        
+        # Konvergensiya tekshiruvi
+        if max(np.max(np.abs(update_theta)), np.max(np.abs(update_beta))) < tol:
+            break
+    
+    # Identifikatsiya: theta ni markazlash (mean = 0)
+    theta = theta - np.mean(theta)
+    
+    return theta.astype(np.float32), beta.astype(np.float32)
+
+
+def ability_to_standard_score(ability):
+    """
+    Qobiliyatni standart ballga o'tkazish (T-score)
+    
+    Parameters:
+    - ability: Talabaning qobiliyat bahosi (θ)
+    
+    Returns:
+    - standard_score: Standart ball (0-100)
+    """
+    t_score = 50 + (10 * ability)
+    standard_score = np.clip(t_score, 0, 100)
+    return standard_score
+
+
+def ability_to_grade(ability):
+    """
+    Qobiliyatni bahoga o'tkazish
+    
+    Parameters:
+    - ability: Talabaning qobiliyat bahosi (θ)
+    
+    Returns:
+    - grade: Tayinlangan baho
+    """
+    t_score = ability_to_standard_score(ability)
+    
+    if isinstance(t_score, np.ndarray):
+        grades = np.where(t_score >= 70, 'A+',
+                 np.where(t_score >= 65, 'A',
+                 np.where(t_score >= 60, 'B+',
+                 np.where(t_score >= 55, 'B',
+                 np.where(t_score >= 50, 'C+',
+                 np.where(t_score >= 46, 'C', 'NC'))))))
+        return grades
+    else:
+        if t_score >= 70:
+            return 'A+'
+        elif t_score >= 65:
+            return 'A'
+        elif t_score >= 60:
+            return 'B+'
+        elif t_score >= 55:
+            return 'B'
+        elif t_score >= 50:
+            return 'C+'
+        elif t_score >= 46:
+            return 'C'
+        else:
+            return 'NC'
+
+
+def perform_rasch_analysis(test_id, data, question_range='1-40'):
+    """
+    Test natijalarini Rasch modelida tahlil qilish
+    
+    Parameters:
+    - test_id: Test ID
+    - data: Ma'lumotlar bazasi
+    - question_range: '1-40' yoki '40-43' (yozma savollar)
+    
+    Returns:
+    - dict: Rasch tahlil natijalari
+    """
+    try:
+        # Test natijalarini to'plash
+        test_results = [
+            r for r_id, r in data.get('user_results', {}).items()
+            if r.get('test_id') == test_id
+        ]
+        
+        if not test_results or len(test_results) < 2:
+            return None  # Kamida 2 ta natija kerak
+        
+        test = data.get('tests', {}).get(test_id)
+        if not test:
+            return None
+        
+        user_ids = []
+        
+        if question_range == '1-40':
+            # 1-40 savollar uchun (ko'p tanlov)
+            n_students = len(test_results)
+            n_items = 40
+            
+            data_matrix = np.zeros((n_students, n_items), dtype=np.int32)
+            
+            for idx, result in enumerate(test_results):
+                user_ids.append(result['user_id'])
+                # Birinchi 40 ta savol uchun javoblar
+                for i, res in enumerate(result['results'][:40]):
+                    data_matrix[idx, i] = 1 if res.get('is_correct') else 0
+            
+            # Rasch model tahlili
+            theta, beta = rasch_model_analysis(data_matrix)
+            
+            # Har bir talaba uchun standart ball va baho
+            standard_scores = ability_to_standard_score(theta)
+            grades = ability_to_grade(theta)
+            
+            return {
+                'user_ids': user_ids,
+                'abilities': theta.tolist(),
+                'standard_scores': standard_scores.tolist() if isinstance(standard_scores, np.ndarray) else [standard_scores],
+                'grades': grades.tolist() if isinstance(grades, np.ndarray) else [grades],
+                'item_difficulties': beta.tolist(),
+                'n_students': n_students,
+                'n_items': n_items
+            }
+        
+        elif question_range == '40-43':
+            # 40-43 savollar uchun (yozma savollar) - Rasch modelida
+            n_students = len(test_results)
+            
+            # 40-43 savollar sonini aniqlash va 0-1 matrix yaratish
+            text_questions = [q for q in test.get('questions', [])[35:40] if q.get('type') == 'text_answer']
+            problem_questions = [q for q in test.get('questions', [])[40:43] if q.get('type') == 'problem']
+            
+            # Har bir masalaviy savol uchun kichik savollar sonini hisoblash
+            total_sub_items = 0
+            for q in problem_questions:
+                total_sub_items += q.get('sub_question_count', 1)
+            
+            n_text_items = len(text_questions)
+            total_items = n_text_items + total_sub_items
+            
+            if total_items == 0:
+                return None
+            
+            # 0-1 matrix yaratish (har bir kichik savol uchun alohida ustun)
+            data_matrix = np.zeros((n_students, total_items), dtype=np.int32)
+            
+            # Avval barcha user_ids ni to'plash
+            for result in test_results:
+                user_ids.append(result['user_id'])
+            
+            # Keyin matrix yaratish
+            for idx, result in enumerate(test_results):
+                item_idx = 0
+                
+                # 36-40 yozma savollar (indices 35-39)
+                for i in range(35, min(40, len(result['results']))):
+                    res = result['results'][i]
+                    if res.get('is_correct'):
+                        data_matrix[idx, item_idx] = 1
+                    item_idx += 1
+                
+                # 41-43 masalaviy savollar (indices 40-42)
+                for i in range(40, min(43, len(result['results']))):
+                    res = result['results'][i]
+                    if res.get('type') == 'problem' and 'sub_results' in res:
+                        # Har bir kichik savol uchun alohida ustun
+                        for sub in res['sub_results']:
+                            if sub.get('is_correct'):
+                                data_matrix[idx, item_idx] = 1
+                            item_idx += 1
+                    else:
+                        # Oddiy savol
+                        if res.get('is_correct'):
+                            data_matrix[idx, item_idx] = 1
+                        item_idx += 1
+            
+            # Rasch model tahlili
+            theta, beta = rasch_model_analysis(data_matrix)
+            
+            # Har bir talaba uchun standart ball (0-100)
+            standard_scores = ability_to_standard_score(theta)
+            
+            # 0-100 dan 0-75 ga o'tkazish
+            written_scores_scaled = [score * 0.75 for score in (standard_scores.tolist() if isinstance(standard_scores, np.ndarray) else [standard_scores])]
+            
+            return {
+                'user_ids': user_ids,
+                'abilities': theta.tolist(),
+                'written_scores': written_scores_scaled,  # 0-75 shkalada (Rasch model asosida)
+                'written_scores_raw': standard_scores.tolist() if isinstance(standard_scores, np.ndarray) else [standard_scores],  # 0-100 shkalada (Rasch model)
+                'item_difficulties': beta.tolist(),
+                'n_students': n_students,
+                'n_items': total_items
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Rasch tahlil xatosi: {e}")
+        return None
+
+
+def generate_final_results_excel(test_id, data):
+    """
+    Yakuniy natijalar Excel faylini yaratish
+    
+    Format:
+    Talabgor | Test-ball | Yozma ball | Yakuniy ball | Daraja | Foiz
+    
+    Parameters:
+    - test_id: Test ID
+    - data: Ma'lumotlar bazasi
+    
+    Returns:
+    - str: Excel fayl yo'li yoki None
+    """
+    try:
+        # 1-40 savollar uchun Rasch tahlili
+        test_results_1_40 = perform_rasch_analysis(test_id, data, '1-40')
+        # 40-43 savollar uchun yozma ball
+        test_results_40_43 = perform_rasch_analysis(test_id, data, '40-43')
+        
+        if not test_results_1_40:
+            return None
+        
+        # Barcha foydalanuvchilar ro'yxatini olish
+        all_user_ids = test_results_1_40['user_ids']
+        
+        # Excel fayl yaratish
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Yakuniy Natijalar"
+        
+        # Header
+        headers = ['Talabgor', 'Test-ball', 'Yozma ball', 'Yakuniy ball', 'Daraja', 'Foiz']
+        ws.append(headers)
+        
+        # Header qatorini formatlash
+        from openpyxl.styles import Font, Alignment, PatternFill
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.fill = header_fill
+        
+        # User ID bo'yicha mapping
+        test_scores_map = {}
+        standard_scores_list = test_results_1_40['standard_scores']
+        if not isinstance(standard_scores_list, list):
+            standard_scores_list = [standard_scores_list]
+        
+        for i, user_id in enumerate(test_results_1_40['user_ids']):
+            test_scores_map[user_id] = standard_scores_list[i] if i < len(standard_scores_list) else 0
+        
+        written_scores_map = {}
+        if test_results_40_43:
+            written_scores_list = test_results_40_43['written_scores']
+            if not isinstance(written_scores_list, list):
+                written_scores_list = [written_scores_list]
+            
+            for i, user_id in enumerate(test_results_40_43['user_ids']):
+                written_scores_map[user_id] = written_scores_list[i] if i < len(written_scores_list) else 0
+        
+        # Har bir foydalanuvchi uchun qator
+        for user_id in all_user_ids:
+            # Foydalanuvchi ism-familiyasi
+            user_info = data.get('users', {}).get(str(user_id), {})
+            first_name = user_info.get('first_name', '').strip()
+            last_name = user_info.get('last_name', '').strip()
+            full_name = f"{first_name} {last_name}".strip() if first_name and last_name else f"User {user_id}"
+            
+            # Test-ball (1-40 dan, Rasch model)
+            test_score = test_scores_map.get(user_id, 0)
+            if isinstance(test_score, dict):
+                test_score = test_score.get('test_score', 0)
+            
+            # Yozma ball (40-43 dan, 0-75 shkalada)
+            written_score = written_scores_map.get(user_id, 0)
+            
+            # Yakuniy ball (ikkalasining o'rtachasi)
+            final_score = (test_score + written_score) / 2
+            
+            # Daraja (yakuniy ball asosida)
+            final_grade = ability_to_grade_from_score(final_score)
+            
+            # Foiz (yakuniy_ball / 65 * 100)
+            percentage = (final_score / 65) * 100 if 65 > 0 else 0
+            percentage = min(percentage, 100)  # 100% dan oshmasligi kerak
+            
+            # Qator qo'shish
+            row = [
+                full_name,
+                round(test_score, 2),
+                round(written_score, 2),
+                round(final_score, 2),
+                final_grade,
+                round(percentage, 2)
+            ]
+            ws.append(row)
+        
+        # Ustunlarni kengaytirish
+        from openpyxl.utils import get_column_letter
+        for col in range(1, len(headers) + 1):
+            col_letter = get_column_letter(col)
+            ws.column_dimensions[col_letter].width = 20
+        
+        # Faylni saqlash
+        results_dir = "final_results"
+        os.makedirs(results_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        file_path = os.path.join(results_dir, f"final_results_{test_id}_{timestamp}.xlsx")
+        wb.save(file_path)
+        
+        return file_path
+        
+    except Exception as e:
+        logger.error(f"Yakuniy natijalar Excel yaratish xatosi: {e}")
+        return None
+
+
+def ability_to_grade_from_score(score):
+    """
+    Ball asosida baho aniqlash
+    
+    Parameters:
+    - score: Ball (0-100)
+    
+    Returns:
+    - grade: Baho
+    """
+    if score >= 70:
+        return 'A+'
+    elif score >= 65:
+        return 'A'
+    elif score >= 60:
+        return 'B+'
+    elif score >= 55:
+        return 'B'
+    elif score >= 50:
+        return 'C+'
+    elif score >= 46:
+        return 'C'
+    else:
+        return 'NC'
 
 

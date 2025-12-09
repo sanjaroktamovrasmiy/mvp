@@ -24,6 +24,7 @@ from handlers import (
     create_test,
     list_tests,
     my_results,
+    show_statistics,
     callback_handler,
     process_test_file,
     process_test_creation,
@@ -97,6 +98,12 @@ def main():
                 return
             elif text == "📊 Test natijalarim":
                 await my_results(update, context)
+                return
+            elif text == "📈 Statistika":
+                await show_statistics(update, context)
+                return
+            elif text == "➕ Test yaratish":
+                await create_test(update, context)
                 return
         
         # Avval test tahrirlash jarayonini tekshirish

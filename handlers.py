@@ -495,10 +495,15 @@ async def process_test_creation(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text("❌ Test yaratish bekor qilindi.")
             return
 
-        # Test nomini saqlash va keyingi bosqichga o'tish
+        # Test nomini saqlash va keyingi bosqichga o'tish (fayl so'ralmaydi)
         context.user_data['test_name'] = test_name
-        context.user_data['test_creation_step'] = 'file'
-        await update.message.reply_text("📄 Test faylini yuboring:")
+        context.user_data['test_creation_step'] = 'answers'
+        await update.message.reply_text(
+            "✅ Test nomi qabul qilindi!\n\n"
+            "📝 Endi 1-35 savollar uchun javoblarni kiriting:\n\n"
+            "Format: 1a2b3c4d... yoki abc... (35 ta javob)\n"
+            "⚠️ 33, 34, 35-savollar uchun e va f javoblar ham mumkin!"
+        )
         return
 
     elif step == 'text_answers':
@@ -1082,6 +1087,15 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test_id
     test = data['tests'][test_id]
     user_id = update.effective_user.id
 
+    # Test to'xtatilganligini tekshirish
+    if test.get('finalized', False):
+        error_text = "❌ Bu test allaqachon natijalangan va to'xtatilgan!\n\nYangi testni ishlash mumkin emas."
+        if update.callback_query:
+            await update.callback_query.answer(error_text, show_alert=True)
+        else:
+            await update.message.reply_text(error_text)
+        return
+
     # Foydalanuvchi bu testni allaqachon ishlaganligini tekshirish
     user_results = data.get('user_results', {})
     for r_id, result in user_results.items():
@@ -1600,120 +1614,156 @@ async def finalize_test(update: Update, context: ContextTypes.DEFAULT_TYPE, test
     if total_students > 20:
         text += f"... va yana {total_students - 20} ta natija\n"
 
-    # PDF yaratish (barcha natijalar uchun)
+    # Excel fayl yaratish (barcha natijalar uchun)
     try:
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Test Natijalari - {test['name']}</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                h1 {{ color: #333; }}
-                .info {{ background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                th {{ background-color: #4CAF50; color: white; }}
-                tr:nth-child(even) {{ background-color: #f2f2f2; }}
-            </style>
-        </head>
-        <body>
-            <h1>Test Natijalari: {test['name']}</h1>
-            <div class="info">
-                <p><strong>Test ID:</strong> {test_id}</p>
-                <p><strong>Jami ishtirokchilar:</strong> {total_students}</p>
-                <p><strong>O'rtacha foiz:</strong> {avg_percentage:.1f}%</p>
-                <p><strong>Natijalash vaqti:</strong> {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}</p>
-            </div>
-            <h2>Barcha natijalar (foiz bo'yicha tartiblangan):</h2>
-            <table>
-                <tr>
-                    <th>#</th>
-                    <th>Talabgor</th>
-                    <th>To'g'ri javoblar</th>
-                    <th>Foiz</th>
-                    <th>Vaqt</th>
-                </tr>
-        """
-
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from openpyxl.utils import get_column_letter
+        
+        # Excel fayl yaratish
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Test Natijalari"
+        
+        # Header qator
+        headers = ['#', 'Talabgor', 'To\'g\'ri javoblar', 'Jami savollar', 'Foiz (%)', 'Vaqt']
+        ws.append(headers)
+        
+        # Header qatorini formatlash
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.fill = header_fill
+        
+        # Ma'lumotlar qatorlari
         for idx, result in enumerate(finalized_results, 1):
             completed_time = datetime.fromisoformat(result['completed_at']).strftime('%Y-%m-%d %H:%M')
-            html_content += f"""
-                <tr>
-                    <td>{idx}</td>
-                    <td>{result['user_id']}</td>
-                    <td>{result['correct']}/{result['total']}</td>
-                    <td>{result['percentage']:.1f}%</td>
-                    <td>{completed_time}</td>
-                </tr>
-            """
-
-        html_content += """
-            </table>
-        </body>
-        </html>
-        """
-
-        # Fallback matnli ro'yxat (reportlab uchun)
-        fallback_lines = [
-            f"Test natijalari: {test['name']}",
-            f"Test ID: {test_id}",
-            f"Jami ishtirokchilar: {total_students}",
-            f"O'rtacha foiz: {avg_percentage:.1f}%",
-            f"Natijalash vaqti: {datetime.now(UZBEKISTAN_TZ).strftime('%Y-%m-%d %H:%M')}",
-            "",
-            "Ishtirokchilar (foiz bo'yicha):"
-        ]
-        for idx, result in enumerate(finalized_results, 1):
-            fallback_lines.append(
-                f"{idx}. Talabgor: {result['user_id']} | "
-                f"{result['correct']}/{result['total']} | "
-                f"{result['percentage']:.1f}% | "
-                f"Vaqt: {datetime.fromisoformat(result['completed_at']).strftime('%Y-%m-%d %H:%M')}"
-            )
-
-        # PDF yaratish
-        pdf_file = generate_pdf(
-            f"final_{test_id}",
-            {
-                'test_name': test['name'],
-                'html_content': html_content,
-                'fallback_title': f"Test natijalari - {test['name']}",
-                'fallback_lines': fallback_lines
-            }
-        )
-
+            row = [
+                idx,
+                result['user_id'],
+                result['correct'],
+                result['total'],
+                round(result['percentage'], 2),
+                completed_time
+            ]
+            ws.append(row)
+        
+        # Ustunlarni kengaytirish
+        for col in range(1, len(headers) + 1):
+            col_letter = get_column_letter(col)
+            ws.column_dimensions[col_letter].width = 20
+        
+        # Ma'lumotlar qatorlarini formatlash
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+            for cell in row:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Excel faylni saqlash
+        results_dir = "final_results"
+        os.makedirs(results_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        excel_file_path = os.path.join(results_dir, f"test_results_{test_id}_{timestamp}.xlsx")
+        wb.save(excel_file_path)
+        
         # O'qituvchiga yuborish
         if update.callback_query:
             await update.callback_query.edit_message_text(text)
         else:
             await update.message.reply_text(text)
 
-        if pdf_file:
+        # Excel faylni yuborish
+        with open(excel_file_path, 'rb') as excel_file:
             if update.callback_query:
                 await update.callback_query.message.reply_document(
-                    document=pdf_file,
-                    filename=f"test_final_results_{test_id}.pdf"
+                    document=excel_file,
+                    filename=f"test_results_{test_id}.xlsx",
+                    caption=f"📊 Test natijalari: {test['name']}\n\n"
+                            f"📈 Jami ishtirokchilar: {total_students}\n"
+                            f"📊 O'rtacha foiz: {avg_percentage:.1f}%"
                 )
             else:
                 await update.message.reply_document(
-                    document=pdf_file,
-                    filename=f"test_final_results_{test_id}.pdf"
+                    document=excel_file,
+                    filename=f"test_results_{test_id}.xlsx",
+                    caption=f"📊 Test natijalari: {test['name']}\n\n"
+                            f"📈 Jami ishtirokchilar: {total_students}\n"
+                            f"📊 O'rtacha foiz: {avg_percentage:.1f}%"
                 )
+        
+    except Exception as e:
+        logger.error(f"Excel fayl yaratish xatosi: {e}")
+        error_text = f"❌ Excel fayl yaratishda xatolik: {str(e)}"
+        if update.callback_query:
+            await update.callback_query.message.reply_text(error_text)
+        else:
+            await update.message.reply_text(error_text)
 
-        # Testni testlar ro'yxatidan olib tashlash
-        del data['tests'][test_id]
+    # 2ta matrix faylini yaratish va yuborish
+        from utils import generate_response_matrix
+        matrix_file_path_1_40, matrix_file_path_41_43, _ = generate_response_matrix(test_id, data)
+        
+        if matrix_file_path_1_40 and matrix_file_path_41_43:
+            # 1. Questions 1-40 faylini yuborish
+            try:
+                with open(matrix_file_path_1_40, 'rb') as f1:
+                    if update.callback_query:
+                        await update.callback_query.message.reply_document(
+                            document=f1,
+                            filename=f"matrix_1-40_{test_id}.xlsx",
+                            caption=f"📋 0-1 Matrix (1-dars): {test['name']}\n\n"
+                                    f"📊 1-40 savollar uchun matrix\n"
+                                    f"Format: user_id, Q1, Q2, ..., Q40\n"
+                                    f"0 = xato javob, 1 = to'g'ri javob"
+                        )
+                    else:
+                        await update.message.reply_document(
+                            document=f1,
+                            filename=f"matrix_1-40_{test_id}.xlsx",
+                            caption=f"📋 0-1 Matrix (1-dars): {test['name']}\n\n"
+                                    f"📊 1-40 savollar uchun matrix\n"
+                                    f"Format: user_id, Q1, Q2, ..., Q40\n"
+                                    f"0 = xato javob, 1 = to'g'ri javob"
+                        )
+            except Exception as e:
+                logger.error(f"Matrix 1-40 yuborish xatosi: {e}")
+            
+            # 2. Questions 41-43 faylini yuborish
+            try:
+                with open(matrix_file_path_41_43, 'rb') as f2:
+                    if update.callback_query:
+                        await update.callback_query.message.reply_document(
+                            document=f2,
+                            filename=f"matrix_41-43_{test_id}.xlsx",
+                            caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
+                                    f"📊 41-43 savollar uchun batafsil matrix\n"
+                                    f"Format: Talabgor, 41.1, 41.2, ..., 43.n\n"
+                                    f"Har bir kichik savol uchun alohida ustun\n"
+                                    f"0 = xato javob, 1 = to'g'ri javob"
+                        )
+                    else:
+                        await update.message.reply_document(
+                            document=f2,
+                            filename=f"matrix_41-43_{test_id}.xlsx",
+                            caption=f"📋 0-1 Matrix (2-dars): {test['name']}\n\n"
+                                    f"📊 41-43 savollar uchun batafsil matrix\n"
+                                    f"Format: Talabgor, 41.1, 41.2, ..., 43.n\n"
+                                    f"Har bir kichik savol uchun alohida ustun\n"
+                                    f"0 = xato javob, 1 = to'g'ri javob"
+                        )
+            except Exception as e:
+                logger.error(f"Matrix 41-43 yuborish xatosi: {e}")
+
+        # Testni to'xtatish (o'chirmaslik, faqat to'xtatish)
+        # Testni ishlashni to'xtatish uchun 'finalized' flag qo'shamiz
+        test['finalized'] = True
+        test['finalized_at'] = datetime.now(UZBEKISTAN_TZ).isoformat()
+        data['tests'][test_id] = test
         save_data(data)
 
-        # Test faylini o'chirish (ixtiyoriy)
-        if 'file_path' in test and os.path.exists(test['file_path']):
-            try:
-                os.remove(test['file_path'])
-            except:
-                pass
-
-        success_text = f"✅ Test muvaffaqiyatli natijalandi va testlar ro'yxatidan olib tashlandi!"
+        success_text = f"✅ Test muvaffaqiyatli natijalandi va to'xtatildi!"
         if update.callback_query:
             await update.callback_query.message.reply_text(success_text)
         else:
@@ -1857,6 +1907,30 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+
+
+async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Statistika ko'rsatish"""
+    user_id = update.effective_user.id
+    data = load_data()
+    
+    # Foydalanuvchilar soni
+    total_users = len(data.get('users', {}))
+    
+    # Testlar soni
+    total_tests = len(data.get('tests', {}))
+    
+    # Test topshirganlar soni
+    completed_tests = sum(1 for user_data in data.get('users', {}).values() 
+                         if user_data.get('completed_tests'))
+    
+    text = f"""📈 Bot Statistika
+
+👥 Jami foydalanuvchilar: {total_users}
+📝 Jami testlar: {total_tests}
+✅ Test topshirganlar: {completed_tests}
+"""
+    await update.message.reply_text(text)
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback query handler"""
