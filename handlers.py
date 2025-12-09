@@ -248,10 +248,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_boss = user_id == BOSS_ID
     is_admin = user_id in data["admins"]
 
-    # Reply keyboard markup yaratish (barcha foydalanuvchilar uchun)
+    # Reply keyboard markup yaratish
     keyboard = [
         [KeyboardButton("📝 Test ishlash"), KeyboardButton("📊 Test natijalarim")]
     ]
+    # Faqat adminlar va boss uchun qo'shimcha tugmalar
+    if is_boss or is_admin:
+        keyboard.append([KeyboardButton("➕ Test yaratish"), KeyboardButton("📈 Statistika")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     # Foydalanuvchi ismi va familyasini olish
@@ -1910,27 +1913,69 @@ async def my_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Statistika ko'rsatish"""
+    """Statistika ko'rsatish - qisqacha muhim ma'lumotlar (faqat adminlar uchun)"""
     user_id = update.effective_user.id
     data = load_data()
+    
+    # Faqat adminlar va boss uchun
+    if user_id != BOSS_ID and user_id not in data.get("admins", []):
+        await update.message.reply_text("❌ Bu funksiya faqat adminlar uchun!")
+        return
     
     # Foydalanuvchilar soni
     total_users = len(data.get('users', {}))
     
-    # Testlar soni
-    total_tests = len(data.get('tests', {}))
+    # Testlar soni (faqat natijalanmagan testlar)
+    active_tests = len([t for t_id, t in data.get('tests', {}).items() if not t.get('finalized', False)])
+    finalized_tests = len([t for t_id, t in data.get('tests', {}).items() if t.get('finalized', False)])
+    total_tests = active_tests + finalized_tests
     
-    # Test topshirganlar soni
-    completed_tests = sum(1 for user_data in data.get('users', {}).values() 
-                         if user_data.get('completed_tests'))
+    # Test topshirganlar soni (barcha natijalar)
+    total_results = len(data.get('user_results', {}))
     
-    text = f"""📈 Bot Statistika
+    # Bugungi test topshirganlar soni
+    today = datetime.now(UZBEKISTAN_TZ).date()
+    today_results = sum(1 for r in data.get('user_results', {}).values() 
+                       if datetime.fromisoformat(r.get('completed_at', '2000-01-01')).date() == today)
+    
+    # Eng ko'p test topshirgan foydalanuvchi
+    user_test_counts = {}
+    for r in data.get('user_results', {}).values():
+        uid = r.get('user_id')
+        user_test_counts[uid] = user_test_counts.get(uid, 0) + 1
+    
+    top_user_id = max(user_test_counts.items(), key=lambda x: x[1])[0] if user_test_counts else None
+    top_user_count = user_test_counts.get(top_user_id, 0) if top_user_id else 0
+    
+    # O'rtacha foiz (barcha natijalar uchun)
+    all_percentages = [r.get('percentage', 0) for r in data.get('user_results', {}).values()]
+    avg_percentage = sum(all_percentages) / len(all_percentages) if all_percentages else 0
+    
+    # Qisqacha statistika matni
+    text = f"""📈 <b>Bot Statistika</b>
 
-👥 Jami foydalanuvchilar: {total_users}
-📝 Jami testlar: {total_tests}
-✅ Test topshirganlar: {completed_tests}
+👥 <b>Jami foydalanuvchilar:</b> {total_users}
+📝 <b>Faol testlar:</b> {active_tests}
+✅ <b>Jami test topshirganlar:</b> {total_results}
+📅 <b>Bugungi topshirganlar:</b> {today_results}
+📊 <b>O'rtacha foiz:</b> {avg_percentage:.1f}%
+
+<b>🏆 Eng faol foydalanuvchi:</b> {top_user_id} ({top_user_count} ta test)
 """
-    await update.message.reply_text(text)
+    
+    # Reply keyboard yaratish (adminlar uchun to'liq keyboard)
+    is_boss = user_id == BOSS_ID
+    is_admin = user_id in data.get("admins", [])
+    
+    keyboard = [
+        [KeyboardButton("📝 Test ishlash"), KeyboardButton("📊 Test natijalarim")]
+    ]
+    # Faqat adminlar va boss uchun qo'shimcha tugmalar
+    if is_boss or is_admin:
+        keyboard.append([KeyboardButton("➕ Test yaratish"), KeyboardButton("📈 Statistika")])
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback query handler"""
